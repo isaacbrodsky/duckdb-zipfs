@@ -15,8 +15,9 @@ public:
                 FileOpenFlags flags, unique_ptr<FileHandle> inner_handle_p,
                 const mz_zip_archive_file_stat &file_stat,
                 unique_ptr<data_t[]> data)
-      : FileHandle(file_system, path, flags), inner_handle(std::move(inner_handle_p)),
-        file_stat(file_stat), data(std::move(data)), seek_offset(0) {}
+      : FileHandle(file_system, path, flags),
+        inner_handle(std::move(inner_handle_p)), file_stat(file_stat),
+        data(std::move(data)), seek_offset(0) {}
 
   void Close() override;
 
