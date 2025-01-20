@@ -144,8 +144,8 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     mz_zip_reader_extract_file_to_mem(
         &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
 
-    return make_uniq<ZipFileHandle>(*this, path, std::move(handle), file_stat,
-                                    std::move(read_buf));
+    return make_uniq<ZipFileHandle>(*this, path, flags, std::move(handle),
+                                    file_stat, std::move(read_buf));
 
     mz_zip_reader_end(&zip);
   } catch (Exception &ex) {
