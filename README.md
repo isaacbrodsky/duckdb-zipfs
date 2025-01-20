@@ -1,4 +1,4 @@
-[![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/test.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/test.yml)
+[![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
 [![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.1.3&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.1.3)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
