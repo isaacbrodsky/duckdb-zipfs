@@ -6,9 +6,6 @@ This is a [DuckDB](https://duckdb.org) extension that adds support for reading f
 
 # Get started
 
-> [!NOTE]  
-> This extension is not published on the community extensions repository.
-
 Load from the [community extensions repository](https://community-extensions.duckdb.org/extensions/zipfs.html):
 ```SQL
 INSTALL zipfs FROM community;
