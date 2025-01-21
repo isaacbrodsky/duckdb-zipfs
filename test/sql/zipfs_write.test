@@ -1,0 +1,13 @@
+# name: test/sql/zipfs_write.test
+# description: test zipfs extension, writing
+# group: [zipfs]
+
+require zipfs
+
+statement error
+COPY
+    (FROM generate_series(100_000))
+    TO 'zip://example/output.zip/test.csv'
+    (FORMAT 'csv');
+----
+Not implemented Error: ZipFileSystem: FileExists is not implemented!
