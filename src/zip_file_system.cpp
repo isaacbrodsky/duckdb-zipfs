@@ -75,6 +75,9 @@ size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
 unique_ptr<FileHandle>
 ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
                         optional_ptr<FileOpener> opener) {
+  if (!flags.OpenForReading() || flags.OpenForWriting()) {
+    throw IOException("Zip file system can only open for reading");
+  }
 
   // Get the path to the zip file
   const auto paths = SplitArchivePath(path.substr(6));
@@ -98,25 +101,15 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   }
 
   idx_t size = handle->GetFileSize();
-  // auto data = make_uniq_array<data_t>(size);
-  // auto read = handle->Read(data.get(), size);
-
-  // if (read != size) {
-  //   throw IOException("Did not fully read");
-  // }
 
   mz_zip_archive zip;
   mz_zip_zero_struct(&zip);
   zip.m_pRead = &FileSystemZipReadFunc;
   zip.m_pIO_opaque = handle.get();
   try {
-    mz_uint flags = 0;
+    mz_uint zip_flags = 0;
 
-    // if (!mz_zip_reader_init_mem(&zip, data.get(), size, flags)) {
-    //   throw IOException("Failed to init miniz");
-    // }
-
-    if (!mz_zip_reader_init(&zip, size, flags)) {
+    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
       throw IOException("Failed to init miniz");
     }
 
@@ -143,10 +136,12 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     mz_zip_reader_extract_file_to_mem(
         &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
 
-    return make_uniq<ZipFileHandle>(*this, path, flags, std::move(handle),
-                                    file_stat, std::move(read_buf));
+    auto zip_file_handle = make_uniq<ZipFileHandle>(
+        *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
 
     mz_zip_reader_end(&zip);
+
+    return zip_file_handle;
   } catch (Exception &ex) {
     mz_zip_reader_end(&zip);
     throw;
@@ -239,12 +234,6 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   }
 
   idx_t size = archive_handle->GetFileSize();
-  // auto data = make_uniq_array<data_t>(size);
-  // auto read = archive_handle->Read(data.get(), size);
-
-  // if (read != size) {
-  //   throw IOException("Did not fully read");
-  // }
 
   vector<string> result;
   mz_zip_archive zip;
@@ -253,10 +242,6 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   zip.m_pIO_opaque = archive_handle.get();
   try {
     mz_uint flags = 0;
-
-    // if (!mz_zip_reader_init_mem(&zip, data.get(), size, flags)) {
-    //   throw IOException("Failed to init miniz");
-    // }
 
     if (!mz_zip_reader_init(&zip, size, flags)) {
       throw IOException("Failed to init miniz");
