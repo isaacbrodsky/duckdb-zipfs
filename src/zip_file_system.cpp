@@ -4,8 +4,7 @@
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/file_opener.hpp"
-#include "duckdb/storage/object_cache.hpp"
-#include "duckdb/function/scalar/string_functions.hpp"
+#include "duckdb/function/scalar/string_common.hpp"
 
 namespace duckdb {
 
@@ -220,13 +219,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
     }
   }
 
-  optional_ptr<ObjectCache> cache;
   optional_ptr<ClientContext> context = opener->TryGetClientContext();
-  if (context) {
-    if (ObjectCache::ObjectCacheEnabled(*context)) {
-      cache = ObjectCache::GetObjectCache(*context);
-    }
-  }
 
   // Given the path to the zip file, open it
   auto &fs = FileSystem::GetFileSystem(*context);
@@ -307,7 +300,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
           break;
         }
 
-        if (!LikeFun::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
+        if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
           // Not a match
           match = false;
           break;
