@@ -240,6 +240,8 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   mz_zip_zero_struct(&zip);
   zip.m_pRead = &FileSystemZipReadFunc;
   zip.m_pIO_opaque = archive_handle.get();
+  const size_t MAX_FILENAME_SIZE = 512;
+  char filename_buffer[MAX_FILENAME_SIZE];
   try {
     mz_uint flags = 0;
 
@@ -266,16 +268,17 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
       mz_uint filename_size =
           mz_zip_reader_get_filename(&zip, i, nullptr, 0) + 1;
-
-      auto filename = make_uniq_array<char>(size);
-
-      mz_zip_reader_get_filename(&zip, i, filename.get(), filename_size);
+      if (filename_size > MAX_FILENAME_SIZE) {
+        // TODO: Fix properly
+        throw IOException("Encountered very long filename");
+      }
+      mz_zip_reader_get_filename(&zip, i, filename_buffer, filename_size);
 
       if (mz_zip_get_last_error(&zip)) {
         throw IOException("Problem getting filename");
       }
 
-      auto entry_parts = StringUtil::Split(filename.get(), '/');
+      auto entry_parts = StringUtil::Split(std::string(filename_buffer), '/');
 
       if (entry_parts.size() < pattern_parts.size()) {
         // This entry is not deep enough to match the pattern
@@ -316,7 +319,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
       }
 
       if (match) {
-        auto entry_path = "zip://" + zip_path + "/" + filename.get();
+        auto entry_path = "zip://" + zip_path + "/" + filename_buffer;
         // Cache here???
         result.push_back(entry_path);
       }
