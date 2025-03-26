@@ -277,7 +277,6 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
             new_capacity *= 2;
             if (new_capacity > MAX_FILENAME_LEN) {
               throw IOException("Filename too long");
-              break;
             }
         }
         zip_filename.reserve(new_capacity);
