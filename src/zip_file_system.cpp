@@ -1,7 +1,6 @@
 #include "zip_file_system.hpp"
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/limits.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
@@ -240,6 +239,10 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   mz_zip_zero_struct(&zip);
   zip.m_pRead = &FileSystemZipReadFunc;
   zip.m_pIO_opaque = archive_handle.get();
+
+  string zip_filename;
+  const size_t MAX_FILENAME_LEN = 65536; // = 2**16
+  zip_filename.reserve(1024);
   try {
     mz_uint flags = 0;
 
@@ -264,18 +267,28 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
       mz_zip_clear_last_error(&zip);
 
-      mz_uint filename_size =
-          mz_zip_reader_get_filename(&zip, i, nullptr, 0) + 1;
-
-      auto filename = make_uniq_array<char>(size);
-
-      mz_zip_reader_get_filename(&zip, i, filename.get(), filename_size);
+      mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr, 0);
+      // NOTE: filename_size already contains +1 for the leading \0
+      // Double filename capacity/length until it's enough or larger than 2**16,
+      // where 2**16 should be the max filename length in zip files.
+      if (filename_size > zip_filename.capacity()) {
+        size_t new_capacity = zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
+        while (new_capacity < filename_size) {
+            new_capacity *= 2;
+            if (new_capacity > MAX_FILENAME_LEN) {
+              throw IOException("Filename too long");
+            }
+        }
+        zip_filename.reserve(new_capacity);
+      }
+      zip_filename.resize(filename_size - 1);
+      mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
 
       if (mz_zip_get_last_error(&zip)) {
         throw IOException("Problem getting filename");
       }
 
-      auto entry_parts = StringUtil::Split(filename.get(), '/');
+      auto entry_parts = StringUtil::Split(zip_filename, '/');
 
       if (entry_parts.size() < pattern_parts.size()) {
         // This entry is not deep enough to match the pattern
@@ -316,7 +329,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
       }
 
       if (match) {
-        auto entry_path = "zip://" + zip_path + "/" + filename.get();
+        auto entry_path = "zip://" + zip_path + "/" + zip_filename;
         // Cache here???
         result.push_back(entry_path);
       }
