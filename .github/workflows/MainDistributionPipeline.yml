@@ -21,6 +21,8 @@ jobs:
       extension_name: zipfs
 
   duckdb-stable-build:
+    # FIXME: branch is incompatible with duckdb 1.2.2, due to FileSystem API changes
+    if: false
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
