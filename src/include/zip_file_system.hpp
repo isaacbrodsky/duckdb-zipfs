@@ -41,7 +41,7 @@ public:
   void Reset(FileHandle &handle) override;
   idx_t SeekPosition(FileHandle &handle) override;
   std::string GetName() const override { return "ZipFileSystem"; }
-  vector<string> Glob(const string &path, FileOpener *opener) override;
+  vector<OpenFileInfo> Glob(const string &path, FileOpener *opener) override;
 
   bool CanHandleFile(const string &fpath) override;
   bool OnDiskFile(FileHandle &handle) override;

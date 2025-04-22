@@ -194,7 +194,7 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   return t_handle.inner_handle->OnDiskFile();
 }
 
-vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
+vector<OpenFileInfo> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   // Remove the "zip://" prefix
   const auto parts = SplitArchivePath(path.substr(6));
   auto &zip_path = parts.first;
@@ -234,7 +234,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
   idx_t size = archive_handle->GetFileSize();
 
-  vector<string> result;
+  vector<OpenFileInfo> result;
   mz_zip_archive zip;
   mz_zip_zero_struct(&zip);
   zip.m_pRead = &FileSystemZipReadFunc;
