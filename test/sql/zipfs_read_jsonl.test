@@ -1,0 +1,29 @@
+# name: test/sql/zipfs_read_jsonl.test
+# description: test zipfs extension
+# group: [zipfs]
+
+require zipfs
+
+query I
+install json;
+load json;
+select * from read_json('zip://examples/a.zip/*.jsonl', union_by_name = true);
+----
+a1
+a2
+b1
+b2
+
+query I
+install json;
+load json;
+select * from read_json('zip://examples/*.zip/*.jsonl', union_by_name = true);
+----
+a1
+a2
+b1
+b2
+a1
+a2
+b1
+b2
