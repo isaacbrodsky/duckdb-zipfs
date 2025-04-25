@@ -21,7 +21,7 @@ make_uniq_array2(size_t n) // NOLINT: mimic std style
 // Zip Utilities
 //------------------------------------------------------------------------------
 
-// Split a tar path into the path to the archive and the path within the archive
+// Split a zip path into the path to the archive and the path within the archive
 static pair<string, string> SplitArchivePath(const string &path) {
   // TODO: use some escaping here
   const string suffix = ".zip";
@@ -35,7 +35,8 @@ static pair<string, string> SplitArchivePath(const string &path) {
 
   const auto suffix_path = zip_path + UnsafeNumericCast<int64_t>(suffix.size());
   if (suffix_path == path.end()) {
-    return {path, ""};
+    // Glob entire zip file by default
+    return {path, "**"};
   }
 
   if (*suffix_path == '/') {
