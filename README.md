@@ -17,6 +17,11 @@ To read a file:
 SELECT * FROM 'zip://examples/a.zip/a.csv';
 ```
 
+To read a file from azure blob storage (or other file system):
+```SQL
+SELECT * FROM 'zip://az://yourstorageaccount.blob.core.windows.net/yourcontainer/examples/a.zip/a.csv';
+```
+
 ## File names
 
 File names passed into the `zip://` URL scheme are expected to end with `.zip`, which indicates the end of the zip file name. The path after
@@ -25,6 +30,11 @@ that is taken to be the file path within the zip archive.
 Globbing within the zip archive is supported, but see below for performance limitations. A glob query looks like:
 ```SQL
 SELECT * FROM 'zip://examples/a.zip/*.csv';
+```
+
+Globbing for multiple zip files:
+```SQL
+SELECT * FROM 'zip://examples/*.zip/*.csv';
 ```
 
 ## Performance considerations

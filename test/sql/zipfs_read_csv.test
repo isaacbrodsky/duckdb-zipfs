@@ -1,4 +1,4 @@
-# name: test/sql/zipfs.test
+# name: test/sql/zipfs_read_csv.test
 # description: test zipfs extension
 # group: [zipfs]
 
@@ -32,3 +32,4 @@ select * from read_csv('zip://examples/a.zip/*.csv', union_by_name = true);
 99	NULL	NULL	
 98	NULL	NULL
 97	NULL	NULL
+
