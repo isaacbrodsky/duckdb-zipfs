@@ -146,12 +146,13 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     throw;
   }
 }
-    
-void ZipFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) {
-    auto &t_handle = handle.Cast<ZipFileHandle>();
-    auto remaining_bytes = t_handle.file_stat.m_uncomp_size - location;
-    auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-    memcpy(buffer, t_handle.data.get() + location, to_read);
+
+void ZipFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
+                         idx_t location) {
+  auto &t_handle = handle.Cast<ZipFileHandle>();
+  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - location;
+  auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
+  memcpy(buffer, t_handle.data.get() + location, to_read);
 }
 
 int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
@@ -201,7 +202,8 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   return t_handle.inner_handle->OnDiskFile();
 }
 
-vector<OpenFileInfo> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
+vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
+                                         FileOpener *opener) {
   // Remove the "zip://" prefix
   const auto parts = SplitArchivePath(path.substr(6));
   auto &zip_path = parts.first;
@@ -278,15 +280,16 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path, FileOpener *opener)
 
         mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr, 0);
         // NOTE: filename_size already contains +1 for the leading \0
-        // Double filename capacity/length until it's enough or larger than 2**16,
-        // where 2**16 should be the max filename length in zip files.
+        // Double filename capacity/length until it's enough or larger than
+        // 2**16, where 2**16 should be the max filename length in zip files.
         if (filename_size > zip_filename.capacity()) {
-          size_t new_capacity = zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
+          size_t new_capacity =
+              zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
           while (new_capacity < filename_size) {
-              new_capacity *= 2;
-              if (new_capacity > MAX_FILENAME_LEN) {
-                throw IOException("Filename too long");
-              }
+            new_capacity *= 2;
+            if (new_capacity > MAX_FILENAME_LEN) {
+              throw IOException("Filename too long");
+            }
           }
           zip_filename.reserve(new_capacity);
         }
