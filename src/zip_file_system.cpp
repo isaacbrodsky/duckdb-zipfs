@@ -35,7 +35,8 @@ static pair<string, string> SplitArchivePath(const string &path) {
 
   const auto suffix_path = zip_path + UnsafeNumericCast<int64_t>(suffix.size());
   if (suffix_path == path.end()) {
-    return {path, ""};
+    // Glob entire zip file by default
+    return {path, "**"};
   }
 
   if (*suffix_path == '/') {
