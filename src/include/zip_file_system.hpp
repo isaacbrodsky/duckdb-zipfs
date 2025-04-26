@@ -36,13 +36,14 @@ public:
   time_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;
   int64_t Read(FileHandle &handle, void *buffer, int64_t nr_bytes) override;
-  void Read(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location) override;
+  void Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
+            idx_t location) override;
   int64_t GetFileSize(FileHandle &handle) override;
   void Seek(FileHandle &handle, idx_t location) override;
   void Reset(FileHandle &handle) override;
   idx_t SeekPosition(FileHandle &handle) override;
   std::string GetName() const override { return "ZipFileSystem"; }
-  vector<string> Glob(const string &path, FileOpener *opener) override;
+  vector<OpenFileInfo> Glob(const string &path, FileOpener *opener) override;
 
   bool CanHandleFile(const string &fpath) override;
   bool OnDiskFile(FileHandle &handle) override;
