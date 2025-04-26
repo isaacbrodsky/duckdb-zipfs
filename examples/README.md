@@ -16,6 +16,7 @@ Archive:  a.zip
        26  03-29-2025 00:35   b.jsonl
 ---------                     -------
       125                     7 files
+
 $ unzip -l b.zip
 Archive:  b.zip
   Length      Date    Time    Name
@@ -29,6 +30,7 @@ Archive:  b.zip
        26  03-29-2025 00:35   b.jsonl
 ---------                     -------
       125                     7 files
+
 $ unzip -l csv_only.zip
 Archive:  csv_only.zip
   Length      Date    Time    Name
@@ -39,6 +41,7 @@ Archive:  csv_only.zip
        11  01-17-2025 18:45   b.csv
 ---------                     -------
        47                     4 files
+
 $ unzip -l empty.zip
 Archive:  empty.zip
 warning [empty.zip]:  zipfile is empty
