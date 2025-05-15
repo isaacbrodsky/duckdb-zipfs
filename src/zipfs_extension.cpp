@@ -11,12 +11,14 @@
 
 namespace duckdb {
 
-static void LoadInternal(DatabaseInstance &instance) {
-  auto &fs = instance.GetFileSystem();
+void ZipfsExtension::Load(DuckDB &db) {
+  std::string description = "Support for reading files from zip archives";
+  ExtensionUtil::RegisterExtension(*db.instance, "zipfs", {description});
+
+  auto &fs = db.instance->GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
 }
 
-void ZipfsExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
 std::string ZipfsExtension::Name() { return "zipfs"; }
 
 std::string ZipfsExtension::Version() const {
