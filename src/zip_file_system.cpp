@@ -203,7 +203,8 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   return t_handle.inner_handle->OnDiskFile();
 }
 
-vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
+vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
+                                         FileOpener *opener) {
   // Remove the "zip://" prefix
   const auto parts = SplitArchivePath(path.substr(6));
   auto &zip_path = parts.first;
@@ -211,18 +212,18 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
   // Get matching zip files
   auto &fs = FileSystem::GetFileSystem(*opener->TryGetClientContext());
-  vector<string> matching_zips;
+  vector<OpenFileInfo> matching_zips;
   if (HasGlob(zip_path)) {
     matching_zips = fs.Glob(zip_path);
   } else {
     matching_zips.push_back(zip_path);
   }
 
-  vector<string> result;
+  vector<OpenFileInfo> result;
   for (const auto &curr_zip : matching_zips) {
     if (!HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip + "/" + file_path);
+      result.push_back("zip://" + curr_zip.path + "/" + file_path);
       continue;
     }
 
@@ -341,7 +342,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
         }
 
         if (match) {
-          auto entry_path = "zip://" + curr_zip + "/" + zip_filename;
+          auto entry_path = "zip://" + curr_zip.path + "/" + zip_filename;
           // Cache here???
           result.push_back(entry_path);
         }
