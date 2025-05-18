@@ -4,6 +4,7 @@
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
+#include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
 
@@ -22,18 +23,28 @@ make_uniq_array2(size_t n) // NOLINT: mimic std style
 //------------------------------------------------------------------------------
 
 // Split a zip path into the path to the archive and the path within the archive
-static pair<string, string> SplitArchivePath(const string &path) {
-  // TODO: use some escaping here
-  const string suffix = ".zip";
+static pair<string, string> SplitArchivePath(const string &path,
+                                             ClientContext &context) {
+  Value zipfs_extension_value = ".zip";
+  Value zipfs_extension_replacement_value = "/";
+  context.TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
+  context.TryGetCurrentSetting("zipfs_extension_replacement",
+                               zipfs_extension_replacement_value);
+
+  string zipfs_extension_str = zipfs_extension_value.GetValue<string>();
+  string zipfs_extension_replacement_str =
+      zipfs_extension_replacement_value.GetValue<string>();
 
   const auto zip_path =
-      std::search(path.begin(), path.end(), suffix.begin(), suffix.end());
+      std::search(path.begin(), path.end(), zipfs_extension_str.begin(),
+                  zipfs_extension_str.end());
 
   if (zip_path == path.end()) {
     throw IOException("Could not find a '.zip' archive to open in: '%s'", path);
   }
 
-  const auto suffix_path = zip_path + UnsafeNumericCast<int64_t>(suffix.size());
+  const auto suffix_path =
+      zip_path + UnsafeNumericCast<int64_t>(zipfs_extension_str.size());
   if (suffix_path == path.end()) {
     // Glob entire zip file by default
     return {path, "**"};
@@ -80,12 +91,13 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   }
 
   // Get the path to the zip file
-  const auto paths = SplitArchivePath(path.substr(6));
+  auto context = opener->TryGetClientContext();
+  const auto paths = SplitArchivePath(path.substr(6), *context);
   const auto &zip_path = paths.first;
   const auto &file_path = paths.second;
 
   // Now we need to find the file within the zip file and return out file handle
-  auto &fs = FileSystem::GetFileSystem(*opener->TryGetClientContext());
+  auto &fs = FileSystem::GetFileSystem(*context);
   auto handle = fs.OpenFile(zip_path, flags);
   if (!handle) {
     throw IOException("Failed to open file: %s", zip_path);
@@ -205,12 +217,13 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
 
 vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   // Remove the "zip://" prefix
-  const auto parts = SplitArchivePath(path.substr(6));
+  auto context = opener->TryGetClientContext();
+  const auto parts = SplitArchivePath(path.substr(6), *context);
   auto &zip_path = parts.first;
   auto &file_path = parts.second;
 
   // Get matching zip files
-  auto &fs = FileSystem::GetFileSystem(*opener->TryGetClientContext());
+  auto &fs = FileSystem::GetFileSystem(*context);
   vector<string> matching_zips;
   if (HasGlob(zip_path)) {
     matching_zips = fs.Glob(zip_path);

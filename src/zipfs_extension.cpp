@@ -17,6 +17,12 @@ void ZipfsExtension::Load(DuckDB &db) {
 
   auto &fs = db.instance->GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
+
+  auto &config = DBConfig::GetConfig(*db.instance);
+  config.AddExtensionOption("zipfs_extension", "DESCRIPTION",
+                            LogicalType::VARCHAR, Value(".zip"));
+  config.AddExtensionOption("zipfs_extension_replacement", "DESCRIPTION",
+                            LogicalType::VARCHAR, Value("/"));
 }
 
 std::string ZipfsExtension::Name() { return "zipfs"; }
