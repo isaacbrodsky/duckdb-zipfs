@@ -4,27 +4,33 @@
 
 require zipfs
 
+statement ok
+SET zipfs_extension = "!!";
+
+statement ok
+SET zipfs_extension_remove = true;
+
 query III
-SELECT * FROM 'zip://examples/a.zip/a.csv'
+SELECT * FROM 'zip://examples/a.zip!!a.csv'
 ----
 1	2	3
 4	5	6
 7	8	9
 
 query I
-SELECT * FROM 'zip://examples/a.zip/b.csv'
+SELECT * FROM 'zip://examples/a.zip!!b.csv'
 ----
 99
 98
 97
 
 query I
-SELECT hello FROM 'zip://examples/a.zip/nested_dir/some_file.csv'
+SELECT hello FROM 'zip://examples/a.zip!!nested_dir/some_file.csv'
 ----
 world
 
 query III
-select * from read_csv('zip://examples/a.zip/*.csv', union_by_name = true);
+select * from read_csv('zip://examples/a.zip!!*.csv', union_by_name = true);
 ----
 1	2	3
 4	5	6
@@ -35,27 +41,27 @@ select * from read_csv('zip://examples/a.zip/*.csv', union_by_name = true);
 
 # No files match within the zip file
 statement error
-select * from read_csv('zip://examples/a.zip/doesnt_exist*.csv');
+select * from read_csv('zip://examples/a.zip!!doesnt_exist*.csv');
 ----
 No files found that match the pattern
 
 # Invalid file within the zip file
 statement error
-select * from read_csv('zip://examples/a.zip/doesnt_exist.csv');
+select * from read_csv('zip://examples/a.zip!!doesnt_exist.csv');
 ----
 Failed to find file
 
-# No / after .zip
+# No !! after .zip
 statement error
-select * from read_csv('zip://examples/a.zipz*.csv', union_by_name = true);
+select * from read_csv('zip://examples/a.zip/*.csv', union_by_name = true);
 ----
-Could not find valid path within '.zip' archive to open in
+No files found that match the pattern
 
 # No .zip
 statement error
-select * from read_csv('zip://examples/README.md/*.csv', union_by_name = true);
+select * from read_csv('zip://examples/README.md!!*.csv', union_by_name = true);
 ----
-Could not find a '.zip' archive to open in
+Failed to init miniz
 
 query IIII
 select * from read_csv('zip://examples/csv_only.zip', union_by_name = true);
@@ -73,3 +79,9 @@ statement error
 select * from read_csv('zip://examples/empty.zip');
 ----
 No files found that match the pattern
+
+statement ok
+SET zipfs_extension = ".zip";
+
+statement ok
+SET zipfs_extension_remove = false;

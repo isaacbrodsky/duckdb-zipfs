@@ -26,39 +26,67 @@ make_uniq_array2(size_t n) // NOLINT: mimic std style
 static pair<string, string> SplitArchivePath(const string &path,
                                              ClientContext &context) {
   Value zipfs_extension_value = ".zip";
-  Value zipfs_extension_replacement_value = "/";
+  Value zipfs_extension_remove_value = false;
   context.TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
-  context.TryGetCurrentSetting("zipfs_extension_replacement",
-                               zipfs_extension_replacement_value);
+  context.TryGetCurrentSetting("zipfs_extension_remove",
+                               zipfs_extension_remove_value);
 
-  string zipfs_extension_str = zipfs_extension_value.GetValue<string>();
-  string zipfs_extension_replacement_str =
-      zipfs_extension_replacement_value.GetValue<string>();
+  auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
+  auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
 
   const auto zip_path =
       std::search(path.begin(), path.end(), zipfs_extension_str.begin(),
                   zipfs_extension_str.end());
 
-  if (zip_path == path.end()) {
-    throw IOException("Could not find a '.zip' archive to open in: '%s'", path);
-  }
+  if (zipfs_extension_remove) {
+    const auto suffix_found = zip_path != path.end();
+    const auto suffix_path =
+        suffix_found
+            ? zip_path + UnsafeNumericCast<int64_t>(zipfs_extension_str.size())
+            : zip_path;
 
-  const auto suffix_path =
-      zip_path + UnsafeNumericCast<int64_t>(zipfs_extension_str.size());
-  if (suffix_path == path.end()) {
-    // Glob entire zip file by default
-    return {path, "**"};
-  }
+    if (suffix_path == path.end()) {
+      // Glob entire zip file by default
+      return {
+          string(path.begin(),
+                 path.end() - (suffix_found ? zipfs_extension_str.size() : 0)),
+          "**"};
+    }
 
-  if (*suffix_path == '/') {
     // If there is a slash after the last .zip, we need to remove everything
     // after that
-    auto archive_path = string(path.begin(), suffix_path);
-    auto file_path = string(suffix_path + 1, path.end());
+    auto archive_path =
+        string(path.begin(),
+               suffix_path - (suffix_found ? zipfs_extension_str.size() : 0));
+    auto file_path =
+        string(suffix_path + (*suffix_path == '/' ? 1 : 0), path.end());
     return {archive_path, file_path};
-  }
+  } else {
+    if (zip_path == path.end()) {
+      throw IOException("Could not find a '.zip' archive to open in: '%s'",
+                        path);
+    }
 
-  throw IOException("Could not find a '.zip' archive to open in: '%s'.", path);
+    const auto suffix_path =
+        zip_path + UnsafeNumericCast<int64_t>(zipfs_extension_str.size());
+
+    if (suffix_path == path.end()) {
+      // Glob entire zip file by default
+      return {path, "**"};
+    }
+
+    if (*suffix_path == '/') {
+      // If there is a slash after the last .zip, we need to remove everything
+      // after that
+      auto archive_path = string(path.begin(), suffix_path);
+      auto file_path = string(suffix_path + 1, path.end());
+      return {archive_path, file_path};
+    }
+
+    throw IOException(
+        "Could not find valid path within '.zip' archive to open in: '%s'.",
+        path);
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -231,11 +259,21 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
     matching_zips.push_back(zip_path);
   }
 
+  Value zipfs_extension_value = ".zip";
+  Value zipfs_extension_remove_value = false;
+  context->TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
+  context->TryGetCurrentSetting("zipfs_extension_remove",
+                                zipfs_extension_remove_value);
+
+  auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
+  auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
+  auto extension = zipfs_extension_remove ? zipfs_extension_str : "";
+
   vector<string> result;
   for (const auto &curr_zip : matching_zips) {
     if (!HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip + "/" + file_path);
+      result.push_back("zip://" + curr_zip + extension + "/" + file_path);
       continue;
     }
 
@@ -354,7 +392,8 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
         }
 
         if (match) {
-          auto entry_path = "zip://" + curr_zip + "/" + zip_filename;
+          auto entry_path =
+              "zip://" + curr_zip + extension + "/" + zip_filename;
           // Cache here???
           result.push_back(entry_path);
         }
