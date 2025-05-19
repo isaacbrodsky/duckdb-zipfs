@@ -17,6 +17,18 @@ void ZipfsExtension::Load(DuckDB &db) {
 
   auto &fs = db.instance->GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
+
+  auto &config = DBConfig::GetConfig(*db.instance);
+  config.AddExtensionOption("zipfs_extension",
+                            "Extension to look for splitting the zip path and "
+                            "the file path within the zip.",
+                            LogicalType::VARCHAR, Value(".zip"));
+  config.AddExtensionOption(
+      "zipfs_extension_remove",
+      "Whether to remove the extension from the zip path (true, for artificial "
+      "extensions that aren't really in the file name) or keep it (false, for "
+      "using the actual file extension to split on).",
+      LogicalType::BOOLEAN, false);
 }
 
 std::string ZipfsExtension::Name() { return "zipfs"; }
