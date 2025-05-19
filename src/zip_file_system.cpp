@@ -252,12 +252,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
   // Get matching zip files
   auto &fs = FileSystem::GetFileSystem(*context);
-  vector<string> matching_zips;
-  if (HasGlob(zip_path)) {
-    matching_zips = fs.Glob(zip_path);
-  } else {
-    matching_zips.push_back(zip_path);
-  }
+  vector<string> matching_zips = fs.GlobFiles(zip_path, *context);
 
   Value zipfs_extension_value = ".zip";
   Value zipfs_extension_remove_value = false;
