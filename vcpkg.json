@@ -1,6 +1,6 @@
 {
   "dependencies": [
-    "miniz"
+    "libarchive"
   ],
   "vcpkg-configuration": {
     "registries": [
