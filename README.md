@@ -37,6 +37,14 @@ Globbing for multiple zip files:
 SELECT * FROM 'zip://examples/*.zip/*.csv';
 ```
 
+You may use options to turn this behavior off and instead choose some string to split on:
+```SQL
+SET zipfs_extension = "!!";
+SET zipfs_extension_remove = true;
+
+SELECT * FROM 'zip://examples/a.zip!!b.csv'
+```
+
 ## Performance considerations
 
 This extension is intended more for convience than high performance. It does not implement a file metadata cache as `tarfs` (on which this
