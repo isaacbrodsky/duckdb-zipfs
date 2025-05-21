@@ -243,7 +243,8 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   return t_handle.inner_handle->OnDiskFile();
 }
 
-vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
+vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
+                                         FileOpener *opener) {
   // Remove the "zip://" prefix
   auto context = opener->TryGetClientContext();
   const auto parts = SplitArchivePath(path.substr(6), *context);
@@ -252,7 +253,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
   // Get matching zip files
   auto &fs = FileSystem::GetFileSystem(*context);
-  vector<string> matching_zips = fs.GlobFiles(zip_path, *context);
+  vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
 
   Value zipfs_extension_value = ".zip";
   Value zipfs_extension_remove_value = false;
@@ -264,11 +265,11 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
   auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
   auto extension = zipfs_extension_remove ? zipfs_extension_str : "";
 
-  vector<string> result;
+  vector<OpenFileInfo> result;
   for (const auto &curr_zip : matching_zips) {
     if (!HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip + extension + "/" + file_path);
+      result.push_back("zip://" + curr_zip.path + extension + "/" + file_path);
       continue;
     }
 
@@ -388,7 +389,7 @@ vector<string> ZipFileSystem::Glob(const string &path, FileOpener *opener) {
 
         if (match) {
           auto entry_path =
-              "zip://" + curr_zip + extension + "/" + zip_filename;
+              "zip://" + curr_zip.path + extension + "/" + zip_filename;
           // Cache here???
           result.push_back(entry_path);
         }
