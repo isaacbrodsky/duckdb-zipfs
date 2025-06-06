@@ -2,8 +2,8 @@
 
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
-#include <miniz/miniz.h>
-#include <miniz/miniz_zip.h>
+#include <archive.h>
+#include <archive_entry.h>
 
 namespace duckdb {
 
