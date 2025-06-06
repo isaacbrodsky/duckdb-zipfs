@@ -405,4 +405,18 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   return result;
 }
 
+bool ZipFileSystem::FileExists(const string &filename,
+                               optional_ptr<FileOpener> opener) {
+  // Remove the "zip://" prefix
+  auto context = opener->TryGetClientContext();
+  const auto parts = SplitArchivePath(filename.substr(6), *context);
+  auto &zip_path = parts.first;
+  auto &file_path = parts.second;
+
+  // Get matching zip files
+  auto &fs = FileSystem::GetFileSystem(*context);
+  // Do not pass opener here, as it will crash later.
+  return fs.FileExists(zip_path);
+}
+
 } // namespace duckdb
