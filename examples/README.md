@@ -19,6 +19,18 @@ Archive:  a.zip
 ```
 
 ```
+$ tar tvvzf a.tar.gz
+drwxr-xr-x  0 isaac  staff       0 Mar 29 00:30 nested_dir/
+-rw-r--r--  0 isaac  staff      26 Mar 29 00:35 nested_dir/some_file.jsonl
+-rw-r--r--  0 isaac  staff      12 Jan 17 18:45 nested_dir/some_file.csv
+-rw-r--r--  0 isaac  staff      24 Jan 17 15:22 a.csv
+-rw-r--r--  0 isaac  staff      26 Mar 29 00:35 a.jsonl
+-rw-r--r--  0 isaac  staff      11 Jan 17 18:45 b.csv
+-rw-r--r--  0 isaac  staff      26 Mar 29 00:35 b.jsonl
+Archive Format: POSIX ustar format,  Compression: gzip
+```
+
+```
 $ unzip -l b.zip
 Archive:  b.zip
   Length      Date    Time    Name
