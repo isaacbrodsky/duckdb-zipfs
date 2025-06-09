@@ -5,10 +5,7 @@
 require zipfs
 
 statement ok
-SET zipfs_extension = "!!";
-
-statement ok
-SET zipfs_extension_remove = true;
+SET zipfs_split = "!!";
 
 query III
 SELECT * FROM 'zip://examples/a.zip!!a.csv'
@@ -114,7 +111,4 @@ select * from read_csv('zip://examples/empty.zip');
 No files found that match the pattern
 
 statement ok
-SET zipfs_extension = ".zip";
-
-statement ok
-SET zipfs_extension_remove = false;
+SET zipfs_split = NULL;

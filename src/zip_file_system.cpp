@@ -15,43 +15,47 @@ namespace duckdb {
 // Split a zip path into the path to the archive and the path within the archive
 static pair<string, string> SplitArchivePath(const string &path,
                                              ClientContext &context) {
-  Value zipfs_extension_value = ".zip";
-  Value zipfs_extension_remove_value = false;
-  context.TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
-  context.TryGetCurrentSetting("zipfs_extension_remove",
-                               zipfs_extension_remove_value);
+  Value zipfs_split_value = Value(LogicalType::VARCHAR);
+  context.TryGetCurrentSetting("zipfs_split", zipfs_split_value);
 
-  auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
-  auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
+  if (!zipfs_split_value.IsNull()) {
+    auto zipfs_split_str = zipfs_split_value.GetValue<string>();
 
-  const auto zip_path =
-      std::search(path.begin(), path.end(), zipfs_extension_str.begin(),
-                  zipfs_extension_str.end());
+    const auto zip_path =
+        std::search(path.begin(), path.end(), zipfs_split_str.begin(),
+                    zipfs_split_str.end());
 
-  if (zipfs_extension_remove) {
     const auto suffix_found = zip_path != path.end();
     const auto suffix_path =
         suffix_found
-            ? zip_path + UnsafeNumericCast<int64_t>(zipfs_extension_str.size())
+            ? zip_path + UnsafeNumericCast<int64_t>(zipfs_split_str.size())
             : zip_path;
 
     if (suffix_path == path.end()) {
       // Glob entire zip file by default
-      return {
-          string(path.begin(),
-                 path.end() - (suffix_found ? zipfs_extension_str.size() : 0)),
-          "**"};
+      return {string(path.begin(),
+                     path.end() - (suffix_found ? zipfs_split_str.size() : 0)),
+              "**"};
     }
 
     // If there is a slash after the last .zip, we need to remove everything
     // after that
     auto archive_path =
         string(path.begin(),
-               suffix_path - (suffix_found ? zipfs_extension_str.size() : 0));
+               suffix_path - (suffix_found ? zipfs_split_str.size() : 0));
     auto file_path =
         string(suffix_path + (*suffix_path == '/' ? 1 : 0), path.end());
     return {archive_path, file_path};
   } else {
+    Value zipfs_extension_value = ".zip";
+    context.TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
+
+    auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
+
+    const auto zip_path =
+        std::search(path.begin(), path.end(), zipfs_extension_str.begin(),
+                    zipfs_extension_str.end());
+
     if (zip_path == path.end()) {
       throw IOException("Could not find a '.zip' archive to open in: '%s'",
                         path);
@@ -304,15 +308,11 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   auto &fs = FileSystem::GetFileSystem(*context);
   vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
 
-  Value zipfs_extension_value = ".zip";
-  Value zipfs_extension_remove_value = false;
-  context->TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
-  context->TryGetCurrentSetting("zipfs_extension_remove",
-                                zipfs_extension_remove_value);
+  Value zipfs_split_value = Value(LogicalType::VARCHAR);
+  context->TryGetCurrentSetting("zipfs_split", zipfs_split_value);
 
-  auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
-  auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
-  auto extension = zipfs_extension_remove ? zipfs_extension_str : "";
+  auto extension =
+      !zipfs_split_value.IsNull() ? zipfs_split_value.GetValue<string>() : "";
 
   vector<OpenFileInfo> result;
   for (const auto &curr_zip : matching_zips) {
@@ -324,6 +324,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
 
     auto pattern_parts = StringUtil::Split(file_path, '/');
     for (auto &part : pattern_parts) {
+      // TODO: This is wrong with zipfs_split
       if (part == "zip:" || StringUtil::EndsWith(part, ".zip")) {
         // We can not glob into nested zip files
         throw NotImplementedException(
