@@ -172,20 +172,27 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   auto on_disk_file = handle->OnDiskFile();
 
   struct archive *archive = archive_read_new();
-  if (archive_read_support_filter_all(archive)) {
-    throw IOException("Failed to init libarchive");
-  }
-  unique_ptr<ZipArchiveHandle> zipHandle =
-      make_uniq<ZipArchiveHandle>(std::move(handle));
-  // TODO: Add skip?
-  if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
-                        &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
-    throw IOException("Failed to init libarchive (2)");
-  }
-  if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
-    throw IOException("Failed to init libarchive (3)");
-  }
   try {
+    if (archive_read_support_filter_all(archive)) {
+      throw IOException("Failed to init libarchive (filter all): %s",
+                        archive_error_string(archive));
+    }
+    if (archive_read_support_format_all(archive)) {
+      throw IOException("Failed to init libarchive (format all): %s",
+                        archive_error_string(archive));
+    }
+    unique_ptr<ZipArchiveHandle> zipHandle =
+        make_uniq<ZipArchiveHandle>(std::move(handle));
+    // TODO: Add skip?
+    if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
+      throw IOException("Failed to init libarchive (seek callback): %s",
+                        archive_error_string(archive));
+    }
+    if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
+                          &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
+      throw IOException("Failed to init libarchive (read callback): %s",
+                        archive_error_string(archive));
+    }
     struct archive_entry *entry = archive_entry_new2(archive);
     try {
       bool found = false;
@@ -202,24 +209,21 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 
       auto read_buf_size = archive_entry_size(entry);
       auto read_buf = make_uniq_array2<data_t>(read_buf_size);
-      size_t read_buf_used = 0;
-      struct archive *outArchive = archive_write_new();
-      try {
-        archive_write_open_memory(outArchive, read_buf.get(), read_buf_size,
-                                  &read_buf_used);
-        archive_read_extract2(archive, entry, outArchive);
 
-        auto zip_file_handle = make_uniq<ZipFileHandle>(
-            *this, path, flags, last_modified_time, has_last_modified_time,
-            file_type, on_disk_file, read_buf_size, std::move(read_buf));
-
-        archive_read_free(archive);
-
-        return zip_file_handle;
-      } catch (Exception &ex3) {
-        archive_write_free(outArchive);
-        throw;
+      auto read_bytes =
+          archive_read_data(archive, read_buf.get(), read_buf_size);
+      if (read_bytes < read_buf_size) {
+        throw IOException("Failed to read: %s", archive_error_string(archive));
       }
+
+      auto zip_file_handle = make_uniq<ZipFileHandle>(
+          *this, path, flags, last_modified_time, has_last_modified_time,
+          file_type, on_disk_file, read_buf_size, std::move(read_buf));
+
+      archive_entry_free(entry);
+      archive_read_free(archive);
+
+      return zip_file_handle;
     } catch (Exception &ex2) {
       archive_entry_free(entry);
       throw;
@@ -288,169 +292,158 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   return t_handle.on_disk_file;
 }
 
-// vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
-//                                          FileOpener *opener) {
-//   // Remove the "zip://" prefix
-//   auto context = opener->TryGetClientContext();
-//   const auto parts = SplitArchivePath(path.substr(6), *context);
-//   auto &zip_path = parts.first;
-//   auto &file_path = parts.second;
+vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
+                                         FileOpener *opener) {
+  // Remove the "zip://" prefix
+  auto context = opener->TryGetClientContext();
+  const auto parts = SplitArchivePath(path.substr(6), *context);
+  auto &zip_path = parts.first;
+  auto &file_path = parts.second;
 
-//   // Get matching zip files
-//   auto &fs = FileSystem::GetFileSystem(*context);
-//   vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
+  // Get matching zip files
+  auto &fs = FileSystem::GetFileSystem(*context);
+  vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
 
-//   Value zipfs_extension_value = ".zip";
-//   Value zipfs_extension_remove_value = false;
-//   context->TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
-//   context->TryGetCurrentSetting("zipfs_extension_remove",
-//                                 zipfs_extension_remove_value);
+  Value zipfs_extension_value = ".zip";
+  Value zipfs_extension_remove_value = false;
+  context->TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
+  context->TryGetCurrentSetting("zipfs_extension_remove",
+                                zipfs_extension_remove_value);
 
-//   auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
-//   auto zipfs_extension_remove =
-//   zipfs_extension_remove_value.GetValue<bool>(); auto extension =
-//   zipfs_extension_remove ? zipfs_extension_str : "";
+  auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
+  auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
+  auto extension = zipfs_extension_remove ? zipfs_extension_str : "";
 
-//   vector<OpenFileInfo> result;
-//   for (const auto &curr_zip : matching_zips) {
-//     if (!HasGlob(file_path)) {
-//       // No glob pattern in the file path, just return the file path
-//       result.push_back("zip://" + curr_zip.path + extension + "/" +
-//       file_path); continue;
-//     }
+  vector<OpenFileInfo> result;
+  for (const auto &curr_zip : matching_zips) {
+    if (!HasGlob(file_path)) {
+      // No glob pattern in the file path, just return the file path
+      result.push_back("zip://" + curr_zip.path + extension + "/" + file_path);
+      continue;
+    }
 
-//     auto pattern_parts = StringUtil::Split(file_path, '/');
-//     for (auto &part : pattern_parts) {
-//       if (part == "zip:" || StringUtil::EndsWith(part, ".zip")) {
-//         // We can not glob into nested zip files
-//         throw NotImplementedException(
-//             "Globbing into nested zip files is not supported");
-//       }
-//     }
+    auto pattern_parts = StringUtil::Split(file_path, '/');
+    for (auto &part : pattern_parts) {
+      if (part == "zip:" || StringUtil::EndsWith(part, ".zip")) {
+        // We can not glob into nested zip files
+        throw NotImplementedException(
+            "Globbing into nested zip files is not supported");
+      }
+    }
 
-//     // Given the path to the zip file, open it
-//     auto archive_handle = fs.OpenFile(curr_zip, FileFlags::FILE_FLAGS_READ);
-//     if (!archive_handle) {
-//       continue; // Skip invalid zip files
-//     }
-//     if (!archive_handle->CanSeek()) {
-//       continue; // Skip unseekable files
-//     }
+    // Given the path to the zip file, open it
+    auto archive_handle = fs.OpenFile(curr_zip, FileFlags::FILE_FLAGS_READ);
+    if (!archive_handle) {
+      continue; // Skip invalid zip files
+    }
+    if (!archive_handle->CanSeek()) {
+      continue; // Skip unseekable files
+    }
 
-//     idx_t size = archive_handle->GetFileSize();
+    idx_t size = archive_handle->GetFileSize();
 
-//     mz_zip_archive zip;
-//     mz_zip_zero_struct(&zip);
-//     zip.m_pRead = &FileSystemZipReadFunc;
-//     zip.m_pIO_opaque = archive_handle.get();
+    struct archive *archive = archive_read_new();
+    try {
+      if (archive_read_support_filter_all(archive)) {
+        throw IOException("Failed to init libarchive (filter all): %s",
+                          archive_error_string(archive));
+      }
+      if (archive_read_support_format_all(archive)) {
+        throw IOException("Failed to init libarchive (format all): %s",
+                          archive_error_string(archive));
+      }
+      unique_ptr<ZipArchiveHandle> zipHandle =
+          make_uniq<ZipArchiveHandle>(std::move(archive_handle));
+      // TODO: Add skip?
+      if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
+        throw IOException("Failed to init libarchive (seek callback): %s",
+                          archive_error_string(archive));
+      }
+      if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
+                            &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
+        throw IOException("Failed to init libarchive (read callback): %s",
+                          archive_error_string(archive));
+      }
+      struct archive_entry *entry = archive_entry_new2(archive);
+      try {
+        string zip_filename;
+        const size_t MAX_FILENAME_LEN = 65536; // = 2**16
+        zip_filename.reserve(1024);
 
-//     string zip_filename;
-//     const size_t MAX_FILENAME_LEN = 65536; // = 2**16
-//     zip_filename.reserve(1024);
-//     try {
-//       mz_uint flags = 0;
+        while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
+          if (archive_entry_mode(entry) & AE_IFDIR) {
+            continue;
+          }
 
-//       if (!mz_zip_reader_init(&zip, size, flags)) {
-//         throw IOException("Failed to init miniz");
-//       }
+          if (archive_entry_is_encrypted(entry)) {
+            continue;
+          }
 
-//       mz_uint i, files;
+          auto path_name = archive_entry_pathname(entry);
+          // TODO: May have backed out an optimization here
+          zip_filename = path_name;
 
-//       files = mz_zip_reader_get_num_files(&zip);
+          auto entry_parts = StringUtil::Split(zip_filename, '/');
 
-//       for (i = 0; i < files; i++) {
-//         mz_zip_clear_last_error(&zip);
+          if (entry_parts.size() < pattern_parts.size()) {
+            // This entry is not deep enough to match the pattern
+            continue;
+          }
 
-//         if (mz_zip_reader_is_file_a_directory(&zip, i))
-//           continue;
+          // Check if the pattern matches the entry
+          bool match = true;
+          for (idx_t i = 0; i < pattern_parts.size(); i++) {
+            const auto &pp = pattern_parts[i];
+            const auto &ep = entry_parts[i];
 
-//         mz_zip_validate_file(&zip, i, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY);
+            if (pp == "**") {
+              // We only allow crawl's to be at the end of the pattern
+              if (i != pattern_parts.size() - 1) {
+                throw NotImplementedException(
+                    "Recursive globs are only supported at the end of zip file "
+                    "path patterns");
+              }
+              // Otherwise, everything else is a match
+              match = true;
+              break;
+            }
 
-//         if (mz_zip_reader_is_file_encrypted(&zip, i))
-//           continue;
+            if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
+              // Not a match
+              match = false;
+              break;
+            }
 
-//         mz_zip_clear_last_error(&zip);
+            if (i == pattern_parts.size() - 1 &&
+                entry_parts.size() > pattern_parts.size()) {
+              // If the entry is deeper than the pattern (and we havent hit a
+              // **), then it is not a match
+              match = false;
+              break;
+            }
+          }
 
-//         mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr,
-//         0);
-//         // NOTE: filename_size already contains +1 for the leading \0
-//         // Double filename capacity/length until it's enough or larger than
-//         // 2**16, where 2**16 should be the max filename length in zip files.
-//         if (filename_size > zip_filename.capacity()) {
-//           size_t new_capacity =
-//               zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
-//           while (new_capacity < filename_size) {
-//             new_capacity *= 2;
-//             if (new_capacity > MAX_FILENAME_LEN) {
-//               throw IOException("Filename too long");
-//             }
-//           }
-//           zip_filename.reserve(new_capacity);
-//         }
-//         zip_filename.resize(filename_size - 1);
-//         mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
+          if (match) {
+            auto entry_path =
+                "zip://" + curr_zip.path + extension + "/" + zip_filename;
+            // Cache here???
+            result.push_back(entry_path);
+          }
+        }
 
-//         if (mz_zip_get_last_error(&zip)) {
-//           throw IOException("Problem getting filename");
-//         }
+        archive_entry_free(entry);
+        archive_read_free(archive);
+      } catch (Exception &ex2) {
+        archive_entry_free(entry);
+        throw;
+      }
+    } catch (Exception &ex) {
+      archive_read_free(archive);
+      throw;
+    }
+  }
 
-//         auto entry_parts = StringUtil::Split(zip_filename, '/');
-
-//         if (entry_parts.size() < pattern_parts.size()) {
-//           // This entry is not deep enough to match the pattern
-//           continue;
-//         }
-
-//         // Check if the pattern matches the entry
-//         bool match = true;
-//         for (idx_t i = 0; i < pattern_parts.size(); i++) {
-//           const auto &pp = pattern_parts[i];
-//           const auto &ep = entry_parts[i];
-
-//           if (pp == "**") {
-//             // We only allow crawl's to be at the end of the pattern
-//             if (i != pattern_parts.size() - 1) {
-//               throw NotImplementedException(
-//                   "Recursive globs are only supported at the end of zip file
-//                   " "path patterns");
-//             }
-//             // Otherwise, everything else is a match
-//             match = true;
-//             break;
-//           }
-
-//           if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
-//             // Not a match
-//             match = false;
-//             break;
-//           }
-
-//           if (i == pattern_parts.size() - 1 &&
-//               entry_parts.size() > pattern_parts.size()) {
-//             // If the entry is deeper than the pattern (and we havent hit a
-//             **),
-//             // then it is not a match
-//             match = false;
-//             break;
-//           }
-//         }
-
-//         if (match) {
-//           auto entry_path =
-//               "zip://" + curr_zip.path + extension + "/" + zip_filename;
-//           // Cache here???
-//           result.push_back(entry_path);
-//         }
-//       }
-
-//       mz_zip_reader_end(&zip);
-//     } catch (Exception &ex) {
-//       mz_zip_reader_end(&zip);
-//       throw;
-//     }
-//   }
-
-//   return result;
-// }
+  return result;
+}
 
 } // namespace duckdb
