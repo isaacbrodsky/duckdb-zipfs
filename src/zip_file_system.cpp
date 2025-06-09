@@ -336,103 +336,111 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
 
     idx_t size = archive_handle->GetFileSize();
 
-    struct archive *archive = archive_read_new();
+    mz_zip_archive zip;
+    mz_zip_zero_struct(&zip);
+    zip.m_pRead = &FileSystemZipReadFunc;
+    zip.m_pIO_opaque = archive_handle.get();
+
+    string zip_filename;
+    const size_t MAX_FILENAME_LEN = 65536; // = 2**16
+    zip_filename.reserve(1024);
     try {
-      if (archive_read_support_filter_all(archive)) {
-        throw IOException("Failed to init libarchive (filter all): %s",
-                          archive_error_string(archive));
+      mz_uint flags = 0;
+
+      if (!mz_zip_reader_init(&zip, size, flags)) {
+        throw IOException("Failed to init miniz");
       }
-      if (archive_read_support_format_all(archive)) {
-        throw IOException("Failed to init libarchive (format all): %s",
-                          archive_error_string(archive));
-      }
-      unique_ptr<ZipArchiveHandle> zipHandle =
-          make_uniq<ZipArchiveHandle>(std::move(archive_handle));
-      // TODO: Add skip?
-      if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
-        throw IOException("Failed to init libarchive (seek callback): %s",
-                          archive_error_string(archive));
-      }
-      if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
-                            &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
-        throw IOException("Failed to init libarchive (read callback): %s",
-                          archive_error_string(archive));
-      }
-      struct archive_entry *entry = archive_entry_new2(archive);
-      try {
-        string zip_filename;
-        const size_t MAX_FILENAME_LEN = 65536; // = 2**16
-        zip_filename.reserve(1024);
 
-        while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
-          if (archive_entry_mode(entry) & AE_IFDIR) {
-            continue;
-          }
+      mz_uint i, files;
 
-          if (archive_entry_is_encrypted(entry)) {
-            continue;
-          }
+      files = mz_zip_reader_get_num_files(&zip);
 
-          auto path_name = archive_entry_pathname(entry);
-          // TODO: May have backed out an optimization here
-          zip_filename = path_name;
+      for (i = 0; i < files; i++) {
+        mz_zip_clear_last_error(&zip);
 
-          auto entry_parts = StringUtil::Split(zip_filename, '/');
+        if (mz_zip_reader_is_file_a_directory(&zip, i))
+          continue;
 
-          if (entry_parts.size() < pattern_parts.size()) {
-            // This entry is not deep enough to match the pattern
-            continue;
-          }
+        mz_zip_validate_file(&zip, i, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY);
 
-          // Check if the pattern matches the entry
-          bool match = true;
-          for (idx_t i = 0; i < pattern_parts.size(); i++) {
-            const auto &pp = pattern_parts[i];
-            const auto &ep = entry_parts[i];
+        if (mz_zip_reader_is_file_encrypted(&zip, i))
+          continue;
 
-            if (pp == "**") {
-              // We only allow crawl's to be at the end of the pattern
-              if (i != pattern_parts.size() - 1) {
-                throw NotImplementedException(
-                    "Recursive globs are only supported at the end of zip file "
-                    "path patterns");
-              }
-              // Otherwise, everything else is a match
-              match = true;
-              break;
-            }
+        mz_zip_clear_last_error(&zip);
 
-            if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
-              // Not a match
-              match = false;
-              break;
-            }
-
-            if (i == pattern_parts.size() - 1 &&
-                entry_parts.size() > pattern_parts.size()) {
-              // If the entry is deeper than the pattern (and we havent hit a
-              // **), then it is not a match
-              match = false;
-              break;
+        mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr, 0);
+        // NOTE: filename_size already contains +1 for the leading \0
+        // Double filename capacity/length until it's enough or larger than
+        // 2**16, where 2**16 should be the max filename length in zip files.
+        if (filename_size > zip_filename.capacity()) {
+          size_t new_capacity =
+              zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
+          while (new_capacity < filename_size) {
+            new_capacity *= 2;
+            if (new_capacity > MAX_FILENAME_LEN) {
+              throw IOException("Filename too long");
             }
           }
+          zip_filename.reserve(new_capacity);
+        }
+        zip_filename.resize(filename_size - 1);
+        mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
 
-          if (match) {
-            auto entry_path =
-                "zip://" + curr_zip.path + extension + "/" + zip_filename;
-            // Cache here???
-            result.push_back(entry_path);
+        if (mz_zip_get_last_error(&zip)) {
+          throw IOException("Problem getting filename");
+        }
+
+        auto entry_parts = StringUtil::Split(zip_filename, '/');
+
+        if (entry_parts.size() < pattern_parts.size()) {
+          // This entry is not deep enough to match the pattern
+          continue;
+        }
+
+        // Check if the pattern matches the entry
+        bool match = true;
+        for (idx_t i = 0; i < pattern_parts.size(); i++) {
+          const auto &pp = pattern_parts[i];
+          const auto &ep = entry_parts[i];
+
+          if (pp == "**") {
+            // We only allow crawl's to be at the end of the pattern
+            if (i != pattern_parts.size() - 1) {
+              throw NotImplementedException(
+                  "Recursive globs are only supported at the end of zip file "
+                  "path patterns");
+            }
+            // Otherwise, everything else is a match
+            match = true;
+            break;
+          }
+
+          if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
+            // Not a match
+            match = false;
+            break;
+          }
+
+          if (i == pattern_parts.size() - 1 &&
+              entry_parts.size() > pattern_parts.size()) {
+            // If the entry is deeper than the pattern (and we havent hit a **),
+            // then it is not a match
+            match = false;
+            break;
           }
         }
 
-        archive_entry_free(entry);
-        archive_read_free(archive);
-      } catch (Exception &ex2) {
-        archive_entry_free(entry);
-        throw;
+        if (match) {
+          auto entry_path =
+              "zip://" + curr_zip.path + extension + "/" + zip_filename;
+          // Cache here???
+          result.push_back(entry_path);
+        }
       }
+
+      mz_zip_reader_end(&zip);
     } catch (Exception &ex) {
-      archive_read_free(archive);
+      mz_zip_reader_end(&zip);
       throw;
     }
   }
