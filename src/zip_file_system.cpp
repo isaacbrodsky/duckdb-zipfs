@@ -8,6 +8,16 @@
 
 namespace duckdb {
 
+// TODO: Something is incorrect about the type in make_uniq_array<...,
+// std::default_delete<DATA_TYPE>, ...>
+template <class DATA_TYPE>
+inline unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>, true>
+make_uniq_array2(size_t n) // NOLINT: mimic std style
+{
+  return unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>, true>(
+      new DATA_TYPE[n]());
+}
+
 //------------------------------------------------------------------------------
 // Zip Utilities
 //------------------------------------------------------------------------------
@@ -87,7 +97,7 @@ static pair<string, string> SplitArchivePath(const string &path,
 // Zip File Handle
 //------------------------------------------------------------------------------
 
-void ZipFileHandle::Close() {}
+void ZipFileHandle::Close() { inner_handle->Close(); }
 
 //------------------------------------------------------------------------------
 // Zip File System
@@ -98,41 +108,11 @@ bool ZipFileSystem::CanHandleFile(const string &fpath) {
   return fpath.size() > 6 && fpath.substr(0, 6) == "zip://";
 }
 
-/* Returns pointer and size of next block of data from archive. */
-la_ssize_t FileSystemZipReadFunc(struct archive *archive, void *clientData,
-                                 const void **buffer) {
-  ZipArchiveHandle *handle = (ZipArchiveHandle *)clientData;
-  auto readBytes =
-      handle->inner_handle->Read(handle->data.get(), handle->data_len);
-  *buffer = handle->data.get();
-  return UnsafeNumericCast<la_ssize_t>(readBytes);
-}
-
-/* Seeks to specified location in the file and returns the position.
- * Whence values are SEEK_SET, SEEK_CUR, SEEK_END from stdio.h.
- * Return ARCHIVE_FATAL if the seek fails for any reason.
- */
-la_int64_t FileSystemZipSeekFunc(struct archive *archive, void *clientData,
-                                 la_int64_t offset, int whence) {
-  ZipArchiveHandle *handle = (ZipArchiveHandle *)clientData;
-  if (whence == SEEK_SET) {
-    handle->inner_handle->Seek(offset);
-  } else if (whence == SEEK_CUR) {
-    handle->inner_handle->Seek(handle->inner_handle->SeekPosition() + offset);
-  } else if (whence == SEEK_END) {
-    handle->inner_handle->Seek(handle->inner_handle->GetFileSize() + offset);
-  } else {
-    return ARCHIVE_FATAL;
-  }
-  return ARCHIVE_OK;
-}
-
-int FileSystemZipOpenFunc(struct archive *archive, void *clientData) {
-  return ARCHIVE_OK;
-}
-
-int FileSystemZipCloseFunc(struct archive *archive, void *clientData) {
-  return ARCHIVE_OK;
+size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
+                             size_t n) {
+  FileHandle *handle = (FileHandle *)pOpaque;
+  handle->Seek(UnsafeNumericCast<idx_t>(file_ofs));
+  return UnsafeNumericCast<size_t>(handle->Read(pBuf, n));
 }
 
 unique_ptr<FileHandle>
@@ -165,75 +145,49 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   }
 
   idx_t size = handle->GetFileSize();
-  time_t last_modified_time = {0};
-  bool has_last_modified_time = true;
+
+  mz_zip_archive zip;
+  mz_zip_zero_struct(&zip);
+  zip.m_pRead = &FileSystemZipReadFunc;
+  zip.m_pIO_opaque = handle.get();
   try {
-    last_modified_time = fs.GetLastModifiedTime(*handle);
-  } catch (NotImplementedException &ex) {
-    has_last_modified_time = false;
-  }
-  auto file_type = fs.GetFileType(*handle);
-  auto on_disk_file = handle->OnDiskFile();
+    mz_uint zip_flags = 0;
 
-  struct archive *archive = archive_read_new();
-  try {
-    if (archive_read_support_filter_all(archive)) {
-      throw IOException("Failed to init libarchive (filter all): %s",
-                        archive_error_string(archive));
+    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
+      throw IOException("Failed to init miniz");
     }
-    if (archive_read_support_format_all(archive)) {
-      throw IOException("Failed to init libarchive (format all): %s",
-                        archive_error_string(archive));
+
+    mz_uint file_index = 0;
+    auto locate_failed =
+        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
+                                     &file_index) == MZ_FALSE;
+    if (locate_failed) {
+      throw IOException("Failed to find file: %s", file_path);
     }
-    unique_ptr<ZipArchiveHandle> zipHandle =
-        make_uniq<ZipArchiveHandle>(std::move(handle));
-    // TODO: Add skip?
-    if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
-      throw IOException("Failed to init libarchive (seek callback): %s",
-                        archive_error_string(archive));
+
+    mz_zip_archive_file_stat file_stat = {0};
+    auto stat_failed =
+        mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
+
+    if (stat_failed) {
+      throw IOException("Problem stat-ing file within archive");
     }
-    if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
-                          &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
-      throw IOException("Failed to init libarchive (read callback): %s",
-                        archive_error_string(archive));
+    if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
+      throw IOException("Unknown compression method");
     }
-    struct archive_entry *entry = archive_entry_new2(archive);
-    try {
-      bool found = false;
-      while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
-        auto pathName = archive_entry_pathname(entry);
-        if (strcmp(pathName, file_path.c_str()) == 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        throw IOException("Failed to find file: %s", file_path);
-      }
 
-      auto read_buf_size = archive_entry_size(entry);
-      auto read_buf = make_uniq_array2<data_t>(read_buf_size);
+    auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
+    mz_zip_reader_extract_file_to_mem(
+        &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
 
-      auto read_bytes =
-          archive_read_data(archive, read_buf.get(), read_buf_size);
-      if (read_bytes < read_buf_size) {
-        throw IOException("Failed to read: %s", archive_error_string(archive));
-      }
+    auto zip_file_handle = make_uniq<ZipFileHandle>(
+        *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
 
-      auto zip_file_handle = make_uniq<ZipFileHandle>(
-          *this, path, flags, last_modified_time, has_last_modified_time,
-          file_type, on_disk_file, read_buf_size, std::move(read_buf));
+    mz_zip_reader_end(&zip);
 
-      archive_entry_free(entry);
-      archive_read_free(archive);
-
-      return zip_file_handle;
-    } catch (Exception &ex2) {
-      archive_entry_free(entry);
-      throw;
-    }
+    return zip_file_handle;
   } catch (Exception &ex) {
-    archive_read_free(archive);
+    mz_zip_reader_end(&zip);
     throw;
   }
 }
@@ -241,7 +195,7 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 void ZipFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
                          idx_t location) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  auto remaining_bytes = t_handle.sz - location;
+  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - location;
   auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
   memcpy(buffer, t_handle.data.get() + location, to_read);
 }
@@ -250,7 +204,7 @@ int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
                             int64_t nr_bytes) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
   auto position = t_handle.seek_offset;
-  auto remaining_bytes = t_handle.sz - position;
+  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - position;
   auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
   memcpy(buffer, t_handle.data.get() + position, to_read);
   t_handle.seek_offset += to_read;
@@ -259,7 +213,7 @@ int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
 
 int64_t ZipFileSystem::GetFileSize(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  return UnsafeNumericCast<int64_t>(t_handle.sz);
+  return UnsafeNumericCast<int64_t>(t_handle.file_stat.m_uncomp_size);
 }
 
 void ZipFileSystem::Seek(FileHandle &handle, idx_t location) {
@@ -278,22 +232,19 @@ bool ZipFileSystem::CanSeek() { return true; }
 
 time_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  if (t_handle.has_last_modified_time) {
-    return t_handle.last_modified_time;
-  } else {
-    throw NotImplementedException("ZipFileSystem: GetLastModifiedTime not "
-                                  "implemented on underlying filesystem");
-  }
+  auto &inner_handle = *t_handle.inner_handle;
+  return inner_handle.file_system.GetLastModifiedTime(inner_handle);
 }
 
 FileType ZipFileSystem::GetFileType(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  return t_handle.file_type;
+  auto &inner_handle = *t_handle.inner_handle;
+  return inner_handle.file_system.GetFileType(inner_handle);
 }
 
 bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  return t_handle.on_disk_file;
+  return t_handle.inner_handle->OnDiskFile();
 }
 
 vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
