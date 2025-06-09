@@ -2,7 +2,7 @@
 [![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.3.0&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.3.0)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)).
+This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
 
 # Get started
 
