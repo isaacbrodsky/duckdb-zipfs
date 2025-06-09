@@ -8,16 +8,6 @@
 
 namespace duckdb {
 
-// TODO: Something is incorrect about the type in make_uniq_array<...,
-// std::default_delete<DATA_TYPE>, ...>
-template <class DATA_TYPE>
-inline unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>, true>
-make_uniq_array2(size_t n) // NOLINT: mimic std style
-{
-  return unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>, true>(
-      new DATA_TYPE[n]());
-}
-
 //------------------------------------------------------------------------------
 // Zip Utilities
 //------------------------------------------------------------------------------
@@ -93,7 +83,7 @@ static pair<string, string> SplitArchivePath(const string &path,
 // Zip File Handle
 //------------------------------------------------------------------------------
 
-void ZipFileHandle::Close() { inner_handle->Close(); }
+void ZipFileHandle::Close() {}
 
 //------------------------------------------------------------------------------
 // Zip File System
@@ -104,11 +94,41 @@ bool ZipFileSystem::CanHandleFile(const string &fpath) {
   return fpath.size() > 6 && fpath.substr(0, 6) == "zip://";
 }
 
-size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
-                             size_t n) {
-  FileHandle *handle = (FileHandle *)pOpaque;
-  handle->Seek(UnsafeNumericCast<idx_t>(file_ofs));
-  return UnsafeNumericCast<size_t>(handle->Read(pBuf, n));
+/* Returns pointer and size of next block of data from archive. */
+la_ssize_t FileSystemZipReadFunc(struct archive *archive, void *clientData,
+                                 const void **buffer) {
+  ZipArchiveHandle *handle = (ZipArchiveHandle *)clientData;
+  auto readBytes =
+      handle->inner_handle->Read(handle->data.get(), handle->data_len);
+  *buffer = handle->data.get();
+  return UnsafeNumericCast<la_ssize_t>(readBytes);
+}
+
+/* Seeks to specified location in the file and returns the position.
+ * Whence values are SEEK_SET, SEEK_CUR, SEEK_END from stdio.h.
+ * Return ARCHIVE_FATAL if the seek fails for any reason.
+ */
+la_int64_t FileSystemZipSeekFunc(struct archive *archive, void *clientData,
+                                 la_int64_t offset, int whence) {
+  ZipArchiveHandle *handle = (ZipArchiveHandle *)clientData;
+  if (whence == SEEK_SET) {
+    handle->inner_handle->Seek(offset);
+  } else if (whence == SEEK_CUR) {
+    handle->inner_handle->Seek(handle->inner_handle->SeekPosition() + offset);
+  } else if (whence == SEEK_END) {
+    handle->inner_handle->Seek(handle->inner_handle->GetFileSize() + offset);
+  } else {
+    return ARCHIVE_FATAL;
+  }
+  return ARCHIVE_OK;
+}
+
+int FileSystemZipOpenFunc(struct archive *archive, void *clientData) {
+  return ARCHIVE_OK;
+}
+
+int FileSystemZipCloseFunc(struct archive *archive, void *clientData) {
+  return ARCHIVE_OK;
 }
 
 unique_ptr<FileHandle>
@@ -141,49 +161,71 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   }
 
   idx_t size = handle->GetFileSize();
-
-  mz_zip_archive zip;
-  mz_zip_zero_struct(&zip);
-  zip.m_pRead = &FileSystemZipReadFunc;
-  zip.m_pIO_opaque = handle.get();
+  time_t last_modified_time = {0};
+  bool has_last_modified_time = true;
   try {
-    mz_uint zip_flags = 0;
+    last_modified_time = fs.GetLastModifiedTime(*handle);
+  } catch (NotImplementedException &ex) {
+    has_last_modified_time = false;
+  }
+  auto file_type = fs.GetFileType(*handle);
+  auto on_disk_file = handle->OnDiskFile();
 
-    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
-      throw IOException("Failed to init miniz");
+  struct archive *archive = archive_read_new();
+  if (archive_read_support_filter_all(archive)) {
+    throw IOException("Failed to init libarchive");
+  }
+  unique_ptr<ZipArchiveHandle> zipHandle =
+      make_uniq<ZipArchiveHandle>(std::move(handle));
+  // TODO: Add skip?
+  if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
+                        &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
+    throw IOException("Failed to init libarchive (2)");
+  }
+  if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
+    throw IOException("Failed to init libarchive (3)");
+  }
+  try {
+    struct archive_entry *entry = archive_entry_new2(archive);
+    try {
+      bool found = false;
+      while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
+        auto pathName = archive_entry_pathname(entry);
+        if (strcmp(pathName, file_path.c_str()) == 0) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        throw IOException("Failed to find file: %s", file_path);
+      }
+
+      auto read_buf_size = archive_entry_size(entry);
+      auto read_buf = make_uniq_array2<data_t>(read_buf_size);
+      size_t read_buf_used = 0;
+      struct archive *outArchive = archive_write_new();
+      try {
+        archive_write_open_memory(outArchive, read_buf.get(), read_buf_size,
+                                  &read_buf_used);
+        archive_read_extract2(archive, entry, outArchive);
+
+        auto zip_file_handle = make_uniq<ZipFileHandle>(
+            *this, path, flags, last_modified_time, has_last_modified_time,
+            file_type, on_disk_file, read_buf_size, std::move(read_buf));
+
+        archive_read_free(archive);
+
+        return zip_file_handle;
+      } catch (Exception &ex3) {
+        archive_write_free(outArchive);
+        throw;
+      }
+    } catch (Exception &ex2) {
+      archive_entry_free(entry);
+      throw;
     }
-
-    mz_uint file_index = 0;
-    auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
-                                     &file_index) == MZ_FALSE;
-    if (locate_failed) {
-      throw IOException("Failed to find file: %s", file_path);
-    }
-
-    mz_zip_archive_file_stat file_stat = {0};
-    auto stat_failed =
-        mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
-
-    if (stat_failed) {
-      throw IOException("Problem stat-ing file within archive");
-    }
-    if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
-      throw IOException("Unknown compression method");
-    }
-
-    auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
-    mz_zip_reader_extract_file_to_mem(
-        &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
-
-    auto zip_file_handle = make_uniq<ZipFileHandle>(
-        *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
-
-    mz_zip_reader_end(&zip);
-
-    return zip_file_handle;
   } catch (Exception &ex) {
-    mz_zip_reader_end(&zip);
+    archive_read_free(archive);
     throw;
   }
 }
@@ -191,7 +233,7 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 void ZipFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
                          idx_t location) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - location;
+  auto remaining_bytes = t_handle.sz - location;
   auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
   memcpy(buffer, t_handle.data.get() + location, to_read);
 }
@@ -200,7 +242,7 @@ int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
                             int64_t nr_bytes) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
   auto position = t_handle.seek_offset;
-  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - position;
+  auto remaining_bytes = t_handle.sz - position;
   auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
   memcpy(buffer, t_handle.data.get() + position, to_read);
   t_handle.seek_offset += to_read;
@@ -209,7 +251,7 @@ int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
 
 int64_t ZipFileSystem::GetFileSize(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  return UnsafeNumericCast<int64_t>(t_handle.file_stat.m_uncomp_size);
+  return UnsafeNumericCast<int64_t>(t_handle.sz);
 }
 
 void ZipFileSystem::Seek(FileHandle &handle, idx_t location) {
@@ -228,181 +270,187 @@ bool ZipFileSystem::CanSeek() { return true; }
 
 time_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  auto &inner_handle = *t_handle.inner_handle;
-  return inner_handle.file_system.GetLastModifiedTime(inner_handle);
+  if (t_handle.has_last_modified_time) {
+    return t_handle.last_modified_time;
+  } else {
+    throw NotImplementedException("ZipFileSystem: GetLastModifiedTime not "
+                                  "implemented on underlying filesystem");
+  }
 }
 
 FileType ZipFileSystem::GetFileType(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  auto &inner_handle = *t_handle.inner_handle;
-  return inner_handle.file_system.GetFileType(inner_handle);
+  return t_handle.file_type;
 }
 
 bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  return t_handle.inner_handle->OnDiskFile();
+  return t_handle.on_disk_file;
 }
 
-vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
-                                         FileOpener *opener) {
-  // Remove the "zip://" prefix
-  auto context = opener->TryGetClientContext();
-  const auto parts = SplitArchivePath(path.substr(6), *context);
-  auto &zip_path = parts.first;
-  auto &file_path = parts.second;
+// vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
+//                                          FileOpener *opener) {
+//   // Remove the "zip://" prefix
+//   auto context = opener->TryGetClientContext();
+//   const auto parts = SplitArchivePath(path.substr(6), *context);
+//   auto &zip_path = parts.first;
+//   auto &file_path = parts.second;
 
-  // Get matching zip files
-  auto &fs = FileSystem::GetFileSystem(*context);
-  vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
+//   // Get matching zip files
+//   auto &fs = FileSystem::GetFileSystem(*context);
+//   vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
 
-  Value zipfs_extension_value = ".zip";
-  Value zipfs_extension_remove_value = false;
-  context->TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
-  context->TryGetCurrentSetting("zipfs_extension_remove",
-                                zipfs_extension_remove_value);
+//   Value zipfs_extension_value = ".zip";
+//   Value zipfs_extension_remove_value = false;
+//   context->TryGetCurrentSetting("zipfs_extension", zipfs_extension_value);
+//   context->TryGetCurrentSetting("zipfs_extension_remove",
+//                                 zipfs_extension_remove_value);
 
-  auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
-  auto zipfs_extension_remove = zipfs_extension_remove_value.GetValue<bool>();
-  auto extension = zipfs_extension_remove ? zipfs_extension_str : "";
+//   auto zipfs_extension_str = zipfs_extension_value.GetValue<string>();
+//   auto zipfs_extension_remove =
+//   zipfs_extension_remove_value.GetValue<bool>(); auto extension =
+//   zipfs_extension_remove ? zipfs_extension_str : "";
 
-  vector<OpenFileInfo> result;
-  for (const auto &curr_zip : matching_zips) {
-    if (!HasGlob(file_path)) {
-      // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip.path + extension + "/" + file_path);
-      continue;
-    }
+//   vector<OpenFileInfo> result;
+//   for (const auto &curr_zip : matching_zips) {
+//     if (!HasGlob(file_path)) {
+//       // No glob pattern in the file path, just return the file path
+//       result.push_back("zip://" + curr_zip.path + extension + "/" +
+//       file_path); continue;
+//     }
 
-    auto pattern_parts = StringUtil::Split(file_path, '/');
-    for (auto &part : pattern_parts) {
-      if (part == "zip:" || StringUtil::EndsWith(part, ".zip")) {
-        // We can not glob into nested zip files
-        throw NotImplementedException(
-            "Globbing into nested zip files is not supported");
-      }
-    }
+//     auto pattern_parts = StringUtil::Split(file_path, '/');
+//     for (auto &part : pattern_parts) {
+//       if (part == "zip:" || StringUtil::EndsWith(part, ".zip")) {
+//         // We can not glob into nested zip files
+//         throw NotImplementedException(
+//             "Globbing into nested zip files is not supported");
+//       }
+//     }
 
-    // Given the path to the zip file, open it
-    auto archive_handle = fs.OpenFile(curr_zip, FileFlags::FILE_FLAGS_READ);
-    if (!archive_handle) {
-      continue; // Skip invalid zip files
-    }
-    if (!archive_handle->CanSeek()) {
-      continue; // Skip unseekable files
-    }
+//     // Given the path to the zip file, open it
+//     auto archive_handle = fs.OpenFile(curr_zip, FileFlags::FILE_FLAGS_READ);
+//     if (!archive_handle) {
+//       continue; // Skip invalid zip files
+//     }
+//     if (!archive_handle->CanSeek()) {
+//       continue; // Skip unseekable files
+//     }
 
-    idx_t size = archive_handle->GetFileSize();
+//     idx_t size = archive_handle->GetFileSize();
 
-    mz_zip_archive zip;
-    mz_zip_zero_struct(&zip);
-    zip.m_pRead = &FileSystemZipReadFunc;
-    zip.m_pIO_opaque = archive_handle.get();
+//     mz_zip_archive zip;
+//     mz_zip_zero_struct(&zip);
+//     zip.m_pRead = &FileSystemZipReadFunc;
+//     zip.m_pIO_opaque = archive_handle.get();
 
-    string zip_filename;
-    const size_t MAX_FILENAME_LEN = 65536; // = 2**16
-    zip_filename.reserve(1024);
-    try {
-      mz_uint flags = 0;
+//     string zip_filename;
+//     const size_t MAX_FILENAME_LEN = 65536; // = 2**16
+//     zip_filename.reserve(1024);
+//     try {
+//       mz_uint flags = 0;
 
-      if (!mz_zip_reader_init(&zip, size, flags)) {
-        throw IOException("Failed to init miniz");
-      }
+//       if (!mz_zip_reader_init(&zip, size, flags)) {
+//         throw IOException("Failed to init miniz");
+//       }
 
-      mz_uint i, files;
+//       mz_uint i, files;
 
-      files = mz_zip_reader_get_num_files(&zip);
+//       files = mz_zip_reader_get_num_files(&zip);
 
-      for (i = 0; i < files; i++) {
-        mz_zip_clear_last_error(&zip);
+//       for (i = 0; i < files; i++) {
+//         mz_zip_clear_last_error(&zip);
 
-        if (mz_zip_reader_is_file_a_directory(&zip, i))
-          continue;
+//         if (mz_zip_reader_is_file_a_directory(&zip, i))
+//           continue;
 
-        mz_zip_validate_file(&zip, i, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY);
+//         mz_zip_validate_file(&zip, i, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY);
 
-        if (mz_zip_reader_is_file_encrypted(&zip, i))
-          continue;
+//         if (mz_zip_reader_is_file_encrypted(&zip, i))
+//           continue;
 
-        mz_zip_clear_last_error(&zip);
+//         mz_zip_clear_last_error(&zip);
 
-        mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr, 0);
-        // NOTE: filename_size already contains +1 for the leading \0
-        // Double filename capacity/length until it's enough or larger than
-        // 2**16, where 2**16 should be the max filename length in zip files.
-        if (filename_size > zip_filename.capacity()) {
-          size_t new_capacity =
-              zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
-          while (new_capacity < filename_size) {
-            new_capacity *= 2;
-            if (new_capacity > MAX_FILENAME_LEN) {
-              throw IOException("Filename too long");
-            }
-          }
-          zip_filename.reserve(new_capacity);
-        }
-        zip_filename.resize(filename_size - 1);
-        mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
+//         mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr,
+//         0);
+//         // NOTE: filename_size already contains +1 for the leading \0
+//         // Double filename capacity/length until it's enough or larger than
+//         // 2**16, where 2**16 should be the max filename length in zip files.
+//         if (filename_size > zip_filename.capacity()) {
+//           size_t new_capacity =
+//               zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
+//           while (new_capacity < filename_size) {
+//             new_capacity *= 2;
+//             if (new_capacity > MAX_FILENAME_LEN) {
+//               throw IOException("Filename too long");
+//             }
+//           }
+//           zip_filename.reserve(new_capacity);
+//         }
+//         zip_filename.resize(filename_size - 1);
+//         mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
 
-        if (mz_zip_get_last_error(&zip)) {
-          throw IOException("Problem getting filename");
-        }
+//         if (mz_zip_get_last_error(&zip)) {
+//           throw IOException("Problem getting filename");
+//         }
 
-        auto entry_parts = StringUtil::Split(zip_filename, '/');
+//         auto entry_parts = StringUtil::Split(zip_filename, '/');
 
-        if (entry_parts.size() < pattern_parts.size()) {
-          // This entry is not deep enough to match the pattern
-          continue;
-        }
+//         if (entry_parts.size() < pattern_parts.size()) {
+//           // This entry is not deep enough to match the pattern
+//           continue;
+//         }
 
-        // Check if the pattern matches the entry
-        bool match = true;
-        for (idx_t i = 0; i < pattern_parts.size(); i++) {
-          const auto &pp = pattern_parts[i];
-          const auto &ep = entry_parts[i];
+//         // Check if the pattern matches the entry
+//         bool match = true;
+//         for (idx_t i = 0; i < pattern_parts.size(); i++) {
+//           const auto &pp = pattern_parts[i];
+//           const auto &ep = entry_parts[i];
 
-          if (pp == "**") {
-            // We only allow crawl's to be at the end of the pattern
-            if (i != pattern_parts.size() - 1) {
-              throw NotImplementedException(
-                  "Recursive globs are only supported at the end of zip file "
-                  "path patterns");
-            }
-            // Otherwise, everything else is a match
-            match = true;
-            break;
-          }
+//           if (pp == "**") {
+//             // We only allow crawl's to be at the end of the pattern
+//             if (i != pattern_parts.size() - 1) {
+//               throw NotImplementedException(
+//                   "Recursive globs are only supported at the end of zip file
+//                   " "path patterns");
+//             }
+//             // Otherwise, everything else is a match
+//             match = true;
+//             break;
+//           }
 
-          if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
-            // Not a match
-            match = false;
-            break;
-          }
+//           if (!duckdb::Glob(ep.c_str(), ep.size(), pp.c_str(), pp.size())) {
+//             // Not a match
+//             match = false;
+//             break;
+//           }
 
-          if (i == pattern_parts.size() - 1 &&
-              entry_parts.size() > pattern_parts.size()) {
-            // If the entry is deeper than the pattern (and we havent hit a **),
-            // then it is not a match
-            match = false;
-            break;
-          }
-        }
+//           if (i == pattern_parts.size() - 1 &&
+//               entry_parts.size() > pattern_parts.size()) {
+//             // If the entry is deeper than the pattern (and we havent hit a
+//             **),
+//             // then it is not a match
+//             match = false;
+//             break;
+//           }
+//         }
 
-        if (match) {
-          auto entry_path =
-              "zip://" + curr_zip.path + extension + "/" + zip_filename;
-          // Cache here???
-          result.push_back(entry_path);
-        }
-      }
+//         if (match) {
+//           auto entry_path =
+//               "zip://" + curr_zip.path + extension + "/" + zip_filename;
+//           // Cache here???
+//           result.push_back(entry_path);
+//         }
+//       }
 
-      mz_zip_reader_end(&zip);
-    } catch (Exception &ex) {
-      mz_zip_reader_end(&zip);
-      throw;
-    }
-  }
+//       mz_zip_reader_end(&zip);
+//     } catch (Exception &ex) {
+//       mz_zip_reader_end(&zip);
+//       throw;
+//     }
+//   }
 
-  return result;
-}
+//   return result;
+// }
 
 } // namespace duckdb
