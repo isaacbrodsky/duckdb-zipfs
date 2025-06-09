@@ -57,8 +57,8 @@ static pair<string, string> SplitArchivePath(const string &path,
                     zipfs_extension_str.end());
 
     if (zip_path == path.end()) {
-      throw IOException("Could not find a '.zip' archive to open in: '%s'",
-                        path);
+      throw IOException("Could not find a '%s' archive to open in: '%s'",
+                        zipfs_extension_str.c_str(), path);
     }
 
     const auto suffix_path =
@@ -78,8 +78,8 @@ static pair<string, string> SplitArchivePath(const string &path,
     }
 
     throw IOException(
-        "Could not find valid path within '.zip' archive to open in: '%s'.",
-        path);
+        "Could not find valid path within '%s' archive to open in: '%s'",
+        zipfs_extension_str.c_str(), path);
   }
 }
 
@@ -323,14 +323,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
     }
 
     auto pattern_parts = StringUtil::Split(file_path, '/');
-    for (auto &part : pattern_parts) {
-      // TODO: This is wrong with zipfs_split
-      if (part == "zip:" || StringUtil::EndsWith(part, ".zip")) {
-        // We can not glob into nested zip files
-        throw NotImplementedException(
-            "Globbing into nested zip files is not supported");
-      }
-    }
+    // TODO: We may want to detect globbing into a nested zip file and reject.
 
     // Given the path to the zip file, open it
     auto archive_handle = fs.OpenFile(curr_zip, FileFlags::FILE_FLAGS_READ);
