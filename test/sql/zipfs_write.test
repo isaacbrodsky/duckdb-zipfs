@@ -10,4 +10,4 @@ COPY
     TO 'zip://example/output.zip/test.csv'
     (FORMAT 'csv');
 ----
-Not implemented Error: ZipFileSystem: FileExists is not implemented!
+IO Error: Zip file system can only open for reading

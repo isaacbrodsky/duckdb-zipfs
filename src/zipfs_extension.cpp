@@ -16,7 +16,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
 
-  auto &config = DBConfig::GetConfig(*db.instance);
+  auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
   config.AddExtensionOption(
       "zipfs_extension",
       "Extension to look for splitting the zip path and "
