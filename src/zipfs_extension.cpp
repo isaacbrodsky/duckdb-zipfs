@@ -16,17 +16,19 @@ static void LoadInternal(ExtensionLoader &loader) {
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
 
-  auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
-  config.AddExtensionOption("zipfs_extension",
-                            "Extension to look for splitting the zip path and "
-                            "the file path within the zip.",
-                            LogicalType::VARCHAR, Value(".zip"));
+  auto &config = DBConfig::GetConfig(*db.instance);
   config.AddExtensionOption(
-      "zipfs_extension_remove",
-      "Whether to remove the extension from the zip path (true, for artificial "
-      "extensions that aren't really in the file name) or keep it (false, for "
-      "using the actual file extension to split on).",
-      LogicalType::BOOLEAN, false);
+      "zipfs_extension",
+      "Extension to look for splitting the zip path and "
+      "the file path within the zip. To specify an artificial seperator, "
+      "instead set: `set zipfs_split = '!!';`",
+      LogicalType::VARCHAR, Value(".zip"));
+  config.AddExtensionOption(
+      "zipfs_split",
+      "Extension to look for splitting the zip path and "
+      "the file path within the zip. Will be removed from the zip file name. "
+      "Overrides zipfs_extension. Defaults to NULL.",
+      LogicalType::VARCHAR, Value(LogicalType::VARCHAR));
 }
 
 void ZipfsExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }

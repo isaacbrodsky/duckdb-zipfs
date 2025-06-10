@@ -39,8 +39,7 @@ SELECT * FROM 'zip://examples/*.zip/*.csv';
 
 You may use options to turn this behavior off and instead choose some string to split on:
 ```SQL
-SET zipfs_extension = "!!";
-SET zipfs_extension_remove = true;
+SET zipfs_split = "!!";
 
 SELECT * FROM 'zip://examples/a.zip!!b.csv'
 ```
