@@ -466,41 +466,53 @@ bool ZipFileSystem::FileExists(const string &filename,
 
   idx_t size = handle->GetFileSize();
 
-  mz_zip_archive zip;
-  mz_zip_zero_struct(&zip);
-  zip.m_pRead = &FileSystemZipReadFunc;
-  zip.m_pIO_opaque = handle.get();
+  struct archive *archive = archive_read_new();
   try {
-    mz_uint zip_flags = 0;
-
-    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
-      return false;
+    if (archive_read_support_filter_all(archive)) {
+      throw IOException("Failed to init libarchive (filter all): %s",
+                        archive_error_string(archive));
     }
-
-    mz_uint file_index = 0;
-    auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
-                                     &file_index) == MZ_FALSE;
-    if (locate_failed) {
-      return false;
+    if (archive_read_support_format_all(archive)) {
+      throw IOException("Failed to init libarchive (format all): %s",
+                        archive_error_string(archive));
     }
-
-    mz_zip_archive_file_stat file_stat = {0};
-    auto stat_failed =
-        mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
-
-    if (stat_failed) {
-      return false;
+    unique_ptr<ZipArchiveHandle> zipHandle =
+        make_uniq<ZipArchiveHandle>(std::move(handle));
+    // TODO: Add skip?
+    if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
+      throw IOException("Failed to init libarchive (seek callback): %s",
+                        archive_error_string(archive));
     }
-    if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
-      return false;
+    if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
+                          &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
+      throw IOException("Failed to init libarchive (read callback): %s",
+                        archive_error_string(archive));
     }
+    struct archive_entry *entry = archive_entry_new2(archive);
+    try {
+      bool found = false;
 
-    mz_zip_reader_end(&zip);
+      while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
+        auto pathName = archive_entry_pathname(entry);
+        if (strcmp(pathName, file_path.c_str()) == 0) {
+          found = true;
+          break;
+        }
+      }
 
-    return true;
+      archive_entry_free(entry);
+      archive_read_free(archive);
+
+      return found;
+    } catch (Exception &ex2) {
+      archive_entry_free(entry);
+      throw;
+    }
+  } catch (IOException &ex) {
+    archive_read_free(archive);
+    return false;
   } catch (Exception &ex) {
-    mz_zip_reader_end(&zip);
+    archive_read_free(archive);
     throw;
   }
 }
