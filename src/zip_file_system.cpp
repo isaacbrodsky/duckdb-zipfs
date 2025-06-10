@@ -413,10 +413,61 @@ bool ZipFileSystem::FileExists(const string &filename,
   auto &zip_path = parts.first;
   auto &file_path = parts.second;
 
-  // Get matching zip files
   auto &fs = FileSystem::GetFileSystem(*context);
   // Do not pass opener here, as it will crash later.
-  return fs.FileExists(zip_path);
+  if (!fs.FileExists(zip_path)) {
+    return false;
+  }
+
+  auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
+  if (!handle) {
+    return false;
+  }
+
+  if (!handle->CanSeek()) {
+    // TODO: Buffer?
+    return false;
+  }
+
+  idx_t size = handle->GetFileSize();
+
+  mz_zip_archive zip;
+  mz_zip_zero_struct(&zip);
+  zip.m_pRead = &FileSystemZipReadFunc;
+  zip.m_pIO_opaque = handle.get();
+  try {
+    mz_uint zip_flags = 0;
+
+    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
+      return false;
+    }
+
+    mz_uint file_index = 0;
+    auto locate_failed =
+        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
+                                     &file_index) == MZ_FALSE;
+    if (locate_failed) {
+      return false;
+    }
+
+    mz_zip_archive_file_stat file_stat = {0};
+    auto stat_failed =
+        mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
+
+    if (stat_failed) {
+      return false;
+    }
+    if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
+      return false;
+    }
+
+    mz_zip_reader_end(&zip);
+
+    return true;
+  } catch (Exception &ex) {
+    mz_zip_reader_end(&zip);
+    throw;
+  }
 }
 
 } // namespace duckdb
