@@ -75,6 +75,8 @@ public:
   idx_t SeekPosition(FileHandle &handle) override;
   std::string GetName() const override { return "ZipFileSystem"; }
   vector<OpenFileInfo> Glob(const string &path, FileOpener *opener) override;
+  bool FileExists(const string &filename,
+                  optional_ptr<FileOpener> opener) override;
 
   bool CanHandleFile(const string &fpath) override;
   bool OnDiskFile(FileHandle &handle) override;
