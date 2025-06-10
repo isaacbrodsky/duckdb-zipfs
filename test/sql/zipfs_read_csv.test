@@ -11,6 +11,11 @@ SELECT * FROM 'zip://examples/a.zip/a.csv'
 4	5	6
 7	8	9
 
+statement error
+SELECT * FROM 'zip://examples-not-found/a.zip'
+----
+Catalog Error: Table with name zip://examples-not-found/a.zip does not exist!
+
 query I
 SELECT * FROM 'zip://examples/a.zip/b.csv'
 ----
