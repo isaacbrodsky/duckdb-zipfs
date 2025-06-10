@@ -51,6 +51,23 @@ This extension is intended more for convience than high performance. It does not
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
 
+# Development
+
+First, install vcpkg to `vcpkg`:
+
+```sh
+git clone https://github.com/Microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+export VCPKG_TOOLCHAIN_PATH=`pwd`/vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+
+Then:
+
+```sh
+make -j 4 release
+make test_release
+```
+
 # License
 
 duckdb-zipfs Copyright 2025 Isaac Brodsky. Licensed under the [MIT License](./LICENSE).
