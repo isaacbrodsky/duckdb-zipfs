@@ -154,7 +154,8 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     mz_uint zip_flags = 0;
 
     if (!mz_zip_reader_init(&zip, size, zip_flags)) {
-      throw IOException("Failed to init miniz");
+      throw IOException("Could not open as zip file: %s",
+                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
     }
 
     mz_uint file_index = 0;
@@ -170,7 +171,8 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
         mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
 
     if (stat_failed) {
-      throw IOException("Problem stat-ing file within archive");
+      throw IOException("Problem stat-ing file within archive: %s",
+                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
     }
     if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
       throw IOException("Unknown compression method");
@@ -299,7 +301,8 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
       mz_uint flags = 0;
 
       if (!mz_zip_reader_init(&zip, size, flags)) {
-        throw IOException("Failed to init miniz");
+        throw IOException("Could not open as zip file: %s",
+                          mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
       }
 
       mz_uint i, files;
@@ -337,8 +340,9 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
         zip_filename.resize(filename_size - 1);
         mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
 
-        if (mz_zip_get_last_error(&zip)) {
-          throw IOException("Problem getting filename");
+        if (auto err = mz_zip_get_last_error(&zip)) {
+          throw IOException("Problem getting filename: %s",
+                            mz_zip_get_error_string(err));
         }
 
         auto entry_parts = StringUtil::Split(zip_filename, '/');
