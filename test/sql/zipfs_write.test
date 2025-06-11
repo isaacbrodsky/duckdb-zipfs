@@ -1,6 +1,6 @@
 # name: test/sql/zipfs_write.test
 # description: test zipfs extension, writing
-# group: [zipfs]
+# group: [sql]
 
 require zipfs
 
