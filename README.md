@@ -1,5 +1,5 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.3.0&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.3.0)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.3.1&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.3.1)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)).
@@ -49,6 +49,23 @@ SELECT * FROM 'zip://examples/a.zip!!b.csv'
 This extension is intended more for convience than high performance. It does not implement a file metadata cache as `tarfs` (on which this
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
+
+# Development
+
+First, install vcpkg to `vcpkg`:
+
+```sh
+git clone https://github.com/Microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+export VCPKG_TOOLCHAIN_PATH=`pwd`/vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+
+Then:
+
+```sh
+make -j 4 release
+make test_release
+```
 
 # License
 
