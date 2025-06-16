@@ -1,6 +1,6 @@
-# name: test/sql/zipfs_read_csv.test
+# name: test/sql/zipfs_read_csv_option.test
 # description: test zipfs extension
-# group: [zipfs]
+# group: [sql]
 
 require zipfs
 
