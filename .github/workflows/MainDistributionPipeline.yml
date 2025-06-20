@@ -13,8 +13,6 @@ concurrency:
 
 jobs:
   duckdb-next-build:
-    # FIXME: zipfs is incompatible with duckdb main branch, due to extension API changes
-    if: false
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
@@ -23,6 +21,8 @@ jobs:
       extension_name: zipfs
 
   duckdb-stable-build:
+    # TODO: Remove once next version released
+    if: false
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.3.1
     with:
