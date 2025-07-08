@@ -2,7 +2,7 @@
 [![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.3.2&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.3.2)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)).
+This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
 
 # Get started
 
@@ -44,6 +44,13 @@ SET zipfs_split = "!!";
 SELECT * FROM 'zip://examples/a.zip!!b.csv'
 ```
 
+Using `zipfs_split` also means you can read other archives supported by libarchive:
+```SQL
+SET zipfs_split = "!!";
+
+SELECT * FROM 'zip://examples/a.tar.gz!!b.csv'
+```
+
 ## Performance considerations
 
 This extension is intended more for convience than high performance. It does not implement a file metadata cache as `tarfs` (on which this
@@ -73,11 +80,15 @@ duckdb-zipfs Copyright 2025 Isaac Brodsky. Licensed under the [MIT License](./LI
 
 [DuckDB](https://github.com/duckdb/duckdb) Copyright 2018-2022 Stichting DuckDB Foundation (MIT License)
 
-[miniz](https://github.com/richgel999/miniz)
-Copyright 2013-2014 RAD Game Tools and Valve Software
-Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
-(MIT License)
+[libarchive](https://github.com/libarchive/libarchive)
+Copyright 2003-2018 Tim Kientzle
+(varying licenses, see repo)
 
 [DuckDB extension-template](https://github.com/duckdb/extension-template) Copyright 2018-2022 DuckDB Labs BV (MIT License)
 
 [duckdb_tarfs](https://github.com/Maxxen/duckdb_tarfs) (MIT license)
+
+Thanks to [miniz](https://github.com/richgel999/miniz)
+Copyright 2013-2014 RAD Game Tools and Valve Software
+Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+(MIT License), which is no longer used in this extension.
