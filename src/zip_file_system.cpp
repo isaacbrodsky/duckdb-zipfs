@@ -232,7 +232,7 @@ idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {
 
 bool ZipFileSystem::CanSeek() { return true; }
 
-time_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
+timestamp_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
   auto &inner_handle = *t_handle.inner_handle;
   return inner_handle.file_system.GetLastModifiedTime(inner_handle);
