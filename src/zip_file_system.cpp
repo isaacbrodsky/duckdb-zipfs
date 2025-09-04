@@ -58,8 +58,9 @@ static pair<string, string> SplitArchivePath(const string &path,
     auto archive_path =
         string(path.begin(),
                suffix_path - (suffix_found ? zipfs_split_str.size() : 0));
-    auto file_path =
-        string(suffix_path + (*suffix_path == sep ? 1 : 0), path.end());
+    auto file_path = string(
+        suffix_path + (*suffix_path == sep || *suffix_path == '/' ? 1 : 0),
+        path.end());
     return {archive_path, file_path};
   } else {
     Value zipfs_extension_value = ".zip";
@@ -84,7 +85,7 @@ static pair<string, string> SplitArchivePath(const string &path,
       return {path, "**"};
     }
 
-    if (*suffix_path == sep) {
+    if (*suffix_path == sep || *suffix_path == '/') {
       // If there is a slash after the last .zip, we need to remove everything
       // after that
       auto archive_path = string(path.begin(), suffix_path);
