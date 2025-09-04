@@ -8,6 +8,8 @@
 
 namespace duckdb {
 
+auto const ZIP_SEPARATOR = "/";
+
 // TODO: Something is incorrect about the type in make_uniq_array<...,
 // std::default_delete<DATA_TYPE>, ...>
 template <class DATA_TYPE>
@@ -145,6 +147,9 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     return handle;
   }
 
+  auto normalized_file_path = StringUtil::Replace(
+      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
+
   if (!handle->CanSeek()) {
     // TODO: Buffer?
     throw IOException("Cannot seek");
@@ -166,10 +171,10 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 
     mz_uint file_index = 0;
     auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
-                                     &file_index) == MZ_FALSE;
+        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
+                                     nullptr, 0, &file_index) == MZ_FALSE;
     if (locate_failed) {
-      throw IOException("Failed to find file: %s", file_path);
+      throw IOException("Failed to find file: %s", normalized_file_path);
     }
 
     mz_zip_archive_file_stat file_stat = {0};
@@ -353,7 +358,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                             mz_zip_get_error_string(err));
         }
 
-        auto entry_parts = StringUtil::Split(zip_filename, sep);
+        auto entry_parts = StringUtil::Split(zip_filename, ZIP_SEPARATOR);
 
         if (entry_parts.size() < pattern_parts.size()) {
           // This entry is not deep enough to match the pattern
@@ -425,6 +430,9 @@ bool ZipFileSystem::FileExists(const string &filename,
     return false;
   }
 
+  auto normalized_file_path = StringUtil::Replace(
+      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
+
   auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
   if (!handle) {
     return false;
@@ -450,8 +458,8 @@ bool ZipFileSystem::FileExists(const string &filename,
 
     mz_uint file_index = 0;
     auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
-                                     &file_index) == MZ_FALSE;
+        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
+                                     nullptr, 0, &file_index) == MZ_FALSE;
     if (locate_failed) {
       return false;
     }
