@@ -259,13 +259,14 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                                          FileOpener *opener) {
   // Remove the "zip://" prefix
   auto context = opener->TryGetClientContext();
-  const auto parts = SplitArchivePath(path.substr(6), *context);
+  auto &fs = FileSystem::GetFileSystem(*context);
+  auto converted_path = fs.ConvertSeparators(path);
+  const auto parts = SplitArchivePath(converted_path.substr(6), *context);
   auto &zip_path = parts.first;
   auto &file_path = parts.second;
 
   // Get matching zip files
-  auto &fs = FileSystem::GetFileSystem(*context);
-  auto sep = fs.PathSeparator(path);
+  auto sep = fs.PathSeparator(converted_path);
   vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
 
   Value zipfs_split_value = Value(LogicalType::VARCHAR);
