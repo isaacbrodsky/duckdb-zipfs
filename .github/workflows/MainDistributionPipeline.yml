@@ -34,7 +34,7 @@ jobs:
     name: Code Quality Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
     with:
-      duckdb_version: v1.3.1
+      duckdb_version: v1.3.2
       ci_tools_version: main
       extension_name: zipfs
-      format_checks: 'format;tidy'
+      format_checks: 'format' # ';tidy' doesn't work with vcpkg
