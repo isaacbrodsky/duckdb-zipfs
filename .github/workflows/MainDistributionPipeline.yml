@@ -13,8 +13,6 @@ concurrency:
 
 jobs:
   duckdb-next-build:
-    # FIXME: zipfs is incompatible with duckdb main branch, due to extension API changes
-    if: false
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
@@ -24,17 +22,17 @@ jobs:
 
   duckdb-stable-build:
     name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.3.2
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
-      duckdb_version: v1.3.2
-      ci_tools_version: v1.3.2
+      duckdb_version: v1.4.0
+      ci_tools_version: main
       extension_name: zipfs
 
   code-quality-check:
     name: Code Quality Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
     with:
-      duckdb_version: v1.3.2
+      duckdb_version: v1.4.0
       ci_tools_version: main
       extension_name: zipfs
       format_checks: 'format' # ';tidy' doesn't work with vcpkg

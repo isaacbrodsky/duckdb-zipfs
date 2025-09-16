@@ -8,6 +8,8 @@
 
 namespace duckdb {
 
+auto const ZIP_SEPARATOR = "/";
+
 // TODO: Something is incorrect about the type in make_uniq_array<...,
 // std::default_delete<DATA_TYPE>, ...>
 template <class DATA_TYPE>
@@ -27,6 +29,11 @@ static pair<string, string> SplitArchivePath(const string &path,
                                              ClientContext &context) {
   Value zipfs_split_value = Value(LogicalType::VARCHAR);
   context.TryGetCurrentSetting("zipfs_split", zipfs_split_value);
+
+  auto &fs = FileSystem::GetFileSystem(context);
+  auto sepStr = fs.PathSeparator(path);
+  D_ASSERT(sepStr.length() == 1);
+  auto sep = sepStr[0];
 
   if (!zipfs_split_value.IsNull()) {
     auto zipfs_split_str = zipfs_split_value.GetValue<string>();
@@ -53,8 +60,9 @@ static pair<string, string> SplitArchivePath(const string &path,
     auto archive_path =
         string(path.begin(),
                suffix_path - (suffix_found ? zipfs_split_str.size() : 0));
-    auto file_path =
-        string(suffix_path + (*suffix_path == '/' ? 1 : 0), path.end());
+    auto file_path = string(
+        suffix_path + (*suffix_path == sep || *suffix_path == '/' ? 1 : 0),
+        path.end());
     return {archive_path, file_path};
   } else {
     Value zipfs_extension_value = ".zip";
@@ -79,7 +87,7 @@ static pair<string, string> SplitArchivePath(const string &path,
       return {path, "**"};
     }
 
-    if (*suffix_path == '/') {
+    if (*suffix_path == sep || *suffix_path == '/') {
       // If there is a slash after the last .zip, we need to remove everything
       // after that
       auto archive_path = string(path.begin(), suffix_path);
@@ -139,6 +147,9 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     return handle;
   }
 
+  auto normalized_file_path = StringUtil::Replace(
+      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
+
   if (!handle->CanSeek()) {
     // TODO: Buffer?
     throw IOException("Cannot seek");
@@ -160,10 +171,10 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 
     mz_uint file_index = 0;
     auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
-                                     &file_index) == MZ_FALSE;
+        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
+                                     nullptr, 0, &file_index) == MZ_FALSE;
     if (locate_failed) {
-      throw IOException("Failed to find file: %s", file_path);
+      throw IOException("Failed to find file: %s", normalized_file_path);
     }
 
     mz_zip_archive_file_stat file_stat = {0};
@@ -232,7 +243,7 @@ idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {
 
 bool ZipFileSystem::CanSeek() { return true; }
 
-time_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
+timestamp_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
   auto &inner_handle = *t_handle.inner_handle;
   return inner_handle.file_system.GetLastModifiedTime(inner_handle);
@@ -253,12 +264,14 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                                          FileOpener *opener) {
   // Remove the "zip://" prefix
   auto context = opener->TryGetClientContext();
-  const auto parts = SplitArchivePath(path.substr(6), *context);
+  auto &fs = FileSystem::GetFileSystem(*context);
+  auto converted_path = fs.ConvertSeparators(path);
+  const auto parts = SplitArchivePath(converted_path.substr(6), *context);
   auto &zip_path = parts.first;
   auto &file_path = parts.second;
 
   // Get matching zip files
-  auto &fs = FileSystem::GetFileSystem(*context);
+  auto sep = fs.PathSeparator(converted_path);
   vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
 
   Value zipfs_split_value = Value(LogicalType::VARCHAR);
@@ -271,11 +284,11 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   for (const auto &curr_zip : matching_zips) {
     if (!HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip.path + extension + "/" + file_path);
+      result.push_back("zip://" + curr_zip.path + extension + sep + file_path);
       continue;
     }
 
-    auto pattern_parts = StringUtil::Split(file_path, '/');
+    auto pattern_parts = StringUtil::Split(file_path, sep);
     // TODO: We may want to detect globbing into a nested zip file and reject.
 
     // Given the path to the zip file, open it
@@ -345,7 +358,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                             mz_zip_get_error_string(err));
         }
 
-        auto entry_parts = StringUtil::Split(zip_filename, '/');
+        auto entry_parts = StringUtil::Split(zip_filename, ZIP_SEPARATOR);
 
         if (entry_parts.size() < pattern_parts.size()) {
           // This entry is not deep enough to match the pattern
@@ -387,7 +400,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
 
         if (match) {
           auto entry_path =
-              "zip://" + curr_zip.path + extension + "/" + zip_filename;
+              "zip://" + curr_zip.path + extension + sep + zip_filename;
           // Cache here???
           result.push_back(entry_path);
         }
@@ -417,6 +430,9 @@ bool ZipFileSystem::FileExists(const string &filename,
     return false;
   }
 
+  auto normalized_file_path = StringUtil::Replace(
+      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
+
   auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
   if (!handle) {
     return false;
@@ -442,8 +458,8 @@ bool ZipFileSystem::FileExists(const string &filename,
 
     mz_uint file_index = 0;
     auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, file_path.c_str(), nullptr, 0,
-                                     &file_index) == MZ_FALSE;
+        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
+                                     nullptr, 0, &file_index) == MZ_FALSE;
     if (locate_failed) {
       return false;
     }

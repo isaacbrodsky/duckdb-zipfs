@@ -82,9 +82,9 @@ No files found that match the pattern
 statement error
 select * from read_csv('zip://examples/empty.aaa');
 ----
-IO Error: Could not find a '.zip' archive to open in: 'examples/empty.aaa'
+IO Error: Could not find a '.zip' archive to open in: 'examples
 
 statement error
 select * from read_csv('zip://examples/a.zip~a.csv');
 ----
-IO Error: Could not find valid path within '.zip' archive to open in: 'examples/a.zip~a.csv'
+IO Error: Could not find valid path within '.zip' archive to open in: 'examples

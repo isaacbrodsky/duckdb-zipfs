@@ -33,7 +33,7 @@ public:
   explicit ZipFileSystem() : FileSystem() { // parent_file_system(parent_p) {
   }
 
-  time_t GetLastModifiedTime(FileHandle &handle) override;
+  timestamp_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;
   int64_t Read(FileHandle &handle, void *buffer, int64_t nr_bytes) override;
   void Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
