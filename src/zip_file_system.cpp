@@ -267,7 +267,8 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   // Get matching zip files
   vector<OpenFileInfo> matching_zips;
   if (has_glob) {
-    matching_zips = fs.GlobFiles(zip_path, *context);
+    matching_zips =
+        fs.GlobFiles(zip_path, *context, FileGlobOptions::DISALLOW_EMPTY);
   } else {
     matching_zips = {OpenFileInfo(zip_path)};
   }
