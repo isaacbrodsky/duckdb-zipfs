@@ -30,11 +30,6 @@ static pair<string, string> SplitArchivePath(const string &path,
   Value zipfs_split_value = Value(LogicalType::VARCHAR);
   context.TryGetCurrentSetting("zipfs_split", zipfs_split_value);
 
-  auto &fs = FileSystem::GetFileSystem(context);
-  auto sepStr = fs.PathSeparator(path);
-  D_ASSERT(sepStr.length() == 1);
-  auto sep = sepStr[0];
-
   if (!zipfs_split_value.IsNull()) {
     auto zipfs_split_str = zipfs_split_value.GetValue<string>();
 
@@ -60,9 +55,8 @@ static pair<string, string> SplitArchivePath(const string &path,
     auto archive_path =
         string(path.begin(),
                suffix_path - (suffix_found ? zipfs_split_str.size() : 0));
-    auto file_path = string(
-        suffix_path + (*suffix_path == sep || *suffix_path == '/' ? 1 : 0),
-        path.end());
+    auto file_path =
+        string(suffix_path + (*suffix_path == '/' ? 1 : 0), path.end());
     return {archive_path, file_path};
   } else {
     Value zipfs_extension_value = ".zip";
@@ -87,7 +81,7 @@ static pair<string, string> SplitArchivePath(const string &path,
       return {path, "**"};
     }
 
-    if (*suffix_path == sep || *suffix_path == '/') {
+    if (*suffix_path == '/') {
       // If there is a slash after the last .zip, we need to remove everything
       // after that
       auto archive_path = string(path.begin(), suffix_path);
@@ -265,14 +259,18 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   // Remove the "zip://" prefix
   auto context = opener->TryGetClientContext();
   auto &fs = FileSystem::GetFileSystem(*context);
-  auto converted_path = fs.ConvertSeparators(path);
-  const auto parts = SplitArchivePath(converted_path.substr(6), *context);
+  const auto parts = SplitArchivePath(path.substr(6), *context);
   auto &zip_path = parts.first;
+  auto has_glob = HasGlob(zip_path);
   auto &file_path = parts.second;
 
   // Get matching zip files
-  auto sep = fs.PathSeparator(converted_path);
-  vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
+  vector<OpenFileInfo> matching_zips;
+  if (has_glob) {
+    matching_zips = fs.GlobFiles(zip_path, *context);
+  } else {
+    matching_zips = {OpenFileInfo(zip_path)};
+  }
 
   Value zipfs_split_value = Value(LogicalType::VARCHAR);
   context->TryGetCurrentSetting("zipfs_split", zipfs_split_value);
@@ -284,11 +282,12 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   for (const auto &curr_zip : matching_zips) {
     if (!HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip.path + extension + sep + file_path);
+      result.push_back("zip://" + curr_zip.path + extension + ZIP_SEPARATOR +
+                       file_path);
       continue;
     }
 
-    auto pattern_parts = StringUtil::Split(file_path, sep);
+    auto pattern_parts = StringUtil::Split(file_path, ZIP_SEPARATOR);
     // TODO: We may want to detect globbing into a nested zip file and reject.
 
     // Given the path to the zip file, open it
@@ -399,8 +398,8 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
         }
 
         if (match) {
-          auto entry_path =
-              "zip://" + curr_zip.path + extension + sep + zip_filename;
+          auto entry_path = "zip://" + curr_zip.path + extension +
+                            ZIP_SEPARATOR + zip_filename;
           // Cache here???
           result.push_back(entry_path);
         }
