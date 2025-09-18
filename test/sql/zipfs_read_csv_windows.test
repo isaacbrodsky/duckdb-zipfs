@@ -85,7 +85,7 @@ NULL	NULL	NULL	world
 statement error
 select * from read_csv('zip://examples\empty.zip');
 ----
-No files found that match the pattern
+IO Error: Could not find valid path within '.zip' archive to open in
 
 statement error
 select * from read_csv('zip://examples\empty.aaa');
