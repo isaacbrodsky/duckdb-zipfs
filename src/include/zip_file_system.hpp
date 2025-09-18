@@ -30,8 +30,7 @@ private:
 
 class ZipFileSystem final : public FileSystem {
 public:
-  explicit ZipFileSystem() : FileSystem() { // parent_file_system(parent_p) {
-  }
+  explicit ZipFileSystem() : FileSystem() {}
 
   timestamp_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;
@@ -55,7 +54,6 @@ public:
                                   optional_ptr<FileOpener> opener) override;
 
 private:
-  // FileSystem &parent_file_system;
 };
 
 } // namespace duckdb

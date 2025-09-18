@@ -1,0 +1,39 @@
+# name: test/sql/zipfs_read_jsonl_windows.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+require windows
+
+query I
+install json;
+load json;
+select * from read_json('zip://examples\a.zip/*.jsonl', union_by_name = true);
+----
+a1
+a2
+b1
+b2
+
+query I
+install json;
+load json;
+select * from read_json('zip://examples\*.zip/*.jsonl', union_by_name = true);
+----
+a1
+a2
+b1
+b2
+a1
+a2
+b1
+b2
+
+# Cannot read csv file that will be grabbed by this glob also
+statement error
+install json;
+load json;
+select * from read_json('zip://examples\*.zip', union_by_name = true);
+----
+<REGEX>:.*Malformed JSON in file.*\.csv".*
