@@ -54,6 +54,7 @@ public:
                                   optional_ptr<FileOpener> opener) override;
 
 private:
+  void AutoLoadExtension(const string &pattern, ClientContext &context);
 };
 
 } // namespace duckdb

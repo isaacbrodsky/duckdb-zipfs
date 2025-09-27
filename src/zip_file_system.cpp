@@ -5,6 +5,7 @@
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/extension_helper.hpp"
 
 namespace duckdb {
 
@@ -254,6 +255,47 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
   return t_handle.inner_handle->OnDiskFile();
 }
 
+// From
+// https://github.com/duckdb/duckdb/blob/f1306eff728e4fb08587368ad770de3f34319243/src/common/file_system.cpp#L631
+static string LookupExtensionForPattern(const string &pattern) {
+  for (const auto &entry : EXTENSION_FILE_PREFIXES) {
+    if (StringUtil::StartsWith(pattern, entry.name)) {
+      return entry.extension;
+    }
+  }
+  return "";
+}
+
+void ZipFileSystem::AutoLoadExtension(const string &pattern,
+                                      ClientContext &context) {
+  // From
+  // https://github.com/duckdb/duckdb/blob/f1306eff728e4fb08587368ad770de3f34319243/src/common/file_system.cpp#L643
+  string required_extension = LookupExtensionForPattern(pattern);
+  if (!required_extension.empty() &&
+      !context.db->ExtensionIsLoaded(required_extension)) {
+    auto &dbconfig = DBConfig::GetConfig(context);
+    if (!ExtensionHelper::CanAutoloadExtension(required_extension) ||
+        !dbconfig.options.autoload_known_extensions) {
+      auto error_message = "Zip file " + pattern + " requires the extension " +
+                           required_extension + " to be loaded";
+      error_message = ExtensionHelper::AddExtensionInstallHintToErrorMsg(
+          context, error_message, required_extension);
+      throw MissingExtensionException(error_message);
+    }
+    // an extension is required to read this file, but it is not loaded - try to
+    // load it
+    ExtensionHelper::AutoLoadExtension(context, required_extension);
+    // success! glob again
+    // check the extension is loaded just in case to prevent an infinite loop
+    // here
+    if (!context.db->ExtensionIsLoaded(required_extension)) {
+      throw InternalException("Extension load \"%s\" did not throw but somehow "
+                              "the extension was not loaded (from zipfs)",
+                              required_extension);
+    }
+  }
+}
+
 vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                                          FileOpener *opener) {
   // Remove the "zip://" prefix
@@ -270,6 +312,11 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
     matching_zips =
         fs.GlobFiles(zip_path, *context, FileGlobOptions::DISALLOW_EMPTY);
   } else {
+    // Normally, GlobFiles performs autoloading of extensions. However, when
+    // there is no glob, we don't call it because it can mangle https:// URLs
+    // (converting slashes into backslashes.) Since we want the autoloading,
+    // we need to explicitly try to autoload here.
+    AutoLoadExtension(zip_path, *context);
     matching_zips = {OpenFileInfo(zip_path)};
   }
 
