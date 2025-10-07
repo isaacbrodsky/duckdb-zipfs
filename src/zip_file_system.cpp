@@ -228,7 +228,10 @@ void ZipFileSystem::Seek(FileHandle &handle, idx_t location) {
   t_handle.seek_offset = t_handle.seek_offset + location;
 }
 
-void ZipFileSystem::Reset(FileHandle &handle) { handle.Cast<ZipFileHandle>(); }
+void ZipFileSystem::Reset(FileHandle &handle) {
+  auto &t_handle = handle.Cast<ZipFileHandle>();
+  t_handle.Seek(0);
+}
 
 idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
