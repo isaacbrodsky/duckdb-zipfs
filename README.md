@@ -50,6 +50,8 @@ This extension is intended more for convience than high performance. It does not
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
 
+The selected file will be read entirely into memory, not streamed. Therefore it cannot be used to read files which are larger than memory when uncompressed.
+
 # Development
 
 First, install vcpkg to `vcpkg`:
