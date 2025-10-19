@@ -34,4 +34,4 @@ install json;
 load json;
 select * from read_json('zip://examples/*.zip', union_by_name = true);
 ----
-<REGEX>:.*Malformed JSON in file.*\.csv".*
+<REGEX>:.*Malformed JSON in file.*\.csv(.gz)?".*
