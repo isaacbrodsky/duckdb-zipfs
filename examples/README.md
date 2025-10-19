@@ -52,3 +52,14 @@ $ unzip -l empty.zip
 Archive:  empty.zip
 warning [empty.zip]:  zipfile is empty
 ```
+
+```
+$ unzip -l csv_gz.zip
+Archive:  csv_gz.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+       50  01-17-2025 15:22   a.csv.gz
+       37  01-17-2025 18:45   b.csv.gz
+---------                     -------
+       87                     2 files
+```

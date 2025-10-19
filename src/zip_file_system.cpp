@@ -225,12 +225,12 @@ int64_t ZipFileSystem::GetFileSize(FileHandle &handle) {
 
 void ZipFileSystem::Seek(FileHandle &handle, idx_t location) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  t_handle.seek_offset = t_handle.seek_offset + location;
+  t_handle.seek_offset = location;
 }
 
 void ZipFileSystem::Reset(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  t_handle.Seek(0);
+  t_handle.seek_offset = 0;
 }
 
 idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {

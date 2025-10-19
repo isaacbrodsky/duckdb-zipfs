@@ -1,0 +1,15 @@
+# name: test/sql/zipfs_read_csv_gzip.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+query III
+select * from read_csv('zip://examples/csv_gz.zip', union_by_name = true);
+----
+1	2	3
+4	5	6
+7	8	9
+99	NULL	NULL
+98	NULL	NULL
+97	NULL	NULL
