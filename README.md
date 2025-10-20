@@ -1,5 +1,5 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.3.2&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.3.2)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.4.1&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.4.1)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
@@ -56,6 +56,8 @@ SELECT * FROM 'zip://examples/a.tar.gz!!b.csv'
 This extension is intended more for convience than high performance. It does not implement a file metadata cache as `tarfs` (on which this
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
+
+The selected file will be read entirely into memory, not streamed. Therefore it cannot be used to read files which are larger than memory when uncompressed.
 
 # Development
 

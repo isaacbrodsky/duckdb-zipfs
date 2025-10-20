@@ -8,6 +8,8 @@
 
 namespace duckdb {
 
+auto const ZIP_SEPARATOR = "/";
+
 //------------------------------------------------------------------------------
 // Zip Utilities
 //------------------------------------------------------------------------------
@@ -159,13 +161,16 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     return handle;
   }
 
+  auto normalized_file_path = StringUtil::Replace(
+      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
+
   if (!handle->CanSeek()) {
     // TODO: Buffer?
     throw IOException("Cannot seek");
   }
 
   idx_t size = handle->GetFileSize();
-  time_t last_modified_time = {0};
+  timestamp_t last_modified_time;
   bool has_last_modified_time = true;
   try {
     last_modified_time = fs.GetLastModifiedTime(*handle);
@@ -181,6 +186,7 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       throw IOException("Failed to init libarchive (filter all): %s",
                         archive_error_string(archive));
     }
+
     if (archive_read_support_format_all(archive)) {
       throw IOException("Failed to init libarchive (format all): %s",
                         archive_error_string(archive));
@@ -264,10 +270,13 @@ int64_t ZipFileSystem::GetFileSize(FileHandle &handle) {
 
 void ZipFileSystem::Seek(FileHandle &handle, idx_t location) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
-  t_handle.seek_offset = t_handle.seek_offset + location;
+  t_handle.seek_offset = location;
 }
 
-void ZipFileSystem::Reset(FileHandle &handle) { handle.Cast<ZipFileHandle>(); }
+void ZipFileSystem::Reset(FileHandle &handle) {
+  auto &t_handle = handle.Cast<ZipFileHandle>();
+  t_handle.seek_offset = 0;
+}
 
 idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
@@ -276,7 +285,7 @@ idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {
 
 bool ZipFileSystem::CanSeek() { return true; }
 
-time_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
+timestamp_t ZipFileSystem::GetLastModifiedTime(FileHandle &handle) {
   auto &t_handle = handle.Cast<ZipFileHandle>();
   if (t_handle.has_last_modified_time) {
     return t_handle.last_modified_time;
@@ -300,13 +309,23 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                                          FileOpener *opener) {
   // Remove the "zip://" prefix
   auto context = opener->TryGetClientContext();
+  auto &fs = FileSystem::GetFileSystem(*context);
   const auto parts = SplitArchivePath(path.substr(6), *context);
   auto &zip_path = parts.first;
+  auto has_glob = HasGlob(zip_path);
   auto &file_path = parts.second;
 
   // Get matching zip files
-  auto &fs = FileSystem::GetFileSystem(*context);
-  vector<OpenFileInfo> matching_zips = fs.GlobFiles(zip_path, *context);
+  vector<OpenFileInfo> matching_zips;
+  if (has_glob) {
+    matching_zips =
+        fs.GlobFiles(zip_path, *context, FileGlobOptions::DISALLOW_EMPTY);
+  } else {
+    // Normally, GlobFiles would be safe. However, when
+    // there is no glob, we don't call it because it can mangle https:// URLs
+    // (converting slashes into backslashes.)
+    matching_zips = {OpenFileInfo(zip_path)};
+  }
 
   Value zipfs_split_value = Value(LogicalType::VARCHAR);
   context->TryGetCurrentSetting("zipfs_split", zipfs_split_value);
@@ -318,11 +337,12 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
   for (const auto &curr_zip : matching_zips) {
     if (!HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
-      result.push_back("zip://" + curr_zip.path + extension + "/" + file_path);
+      result.push_back("zip://" + curr_zip.path + extension + ZIP_SEPARATOR +
+                       file_path);
       continue;
     }
 
-    auto pattern_parts = StringUtil::Split(file_path, '/');
+    auto pattern_parts = StringUtil::Split(file_path, ZIP_SEPARATOR);
     // TODO: We may want to detect globbing into a nested zip file and reject.
 
     // Given the path to the zip file, open it
@@ -418,8 +438,8 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
           }
 
           if (match) {
-            auto entry_path =
-                "zip://" + curr_zip.path + extension + "/" + zip_filename;
+            auto entry_path = "zip://" + curr_zip.path + extension +
+                              ZIP_SEPARATOR + zip_filename;
             // Cache here???
             result.push_back(entry_path);
           }
@@ -453,6 +473,9 @@ bool ZipFileSystem::FileExists(const string &filename,
   if (!fs.FileExists(zip_path)) {
     return false;
   }
+
+  auto normalized_file_path = StringUtil::Replace(
+      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
 
   auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
   if (!handle) {

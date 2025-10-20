@@ -37,7 +37,7 @@ class ZipFileHandle final : public FileHandle {
 
 public:
   ZipFileHandle(FileSystem &file_system, const string &path,
-                FileOpenFlags flags, time_t &last_modified_time,
+                FileOpenFlags flags, timestamp_t &last_modified_time,
                 bool has_last_modified_time, FileType file_type,
                 bool on_disk_file, size_t sz, unique_ptr<data_t[]> data)
       : FileHandle(file_system, path, flags),
@@ -49,7 +49,7 @@ public:
   void Close() override;
 
 private:
-  time_t last_modified_time;
+  timestamp_t last_modified_time;
   bool has_last_modified_time;
   FileType file_type;
   bool on_disk_file;
@@ -61,10 +61,9 @@ private:
 
 class ZipFileSystem final : public FileSystem {
 public:
-  explicit ZipFileSystem() : FileSystem() { // parent_file_system(parent_p) {
-  }
+  explicit ZipFileSystem() : FileSystem() {}
 
-  time_t GetLastModifiedTime(FileHandle &handle) override;
+  timestamp_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;
   int64_t Read(FileHandle &handle, void *buffer, int64_t nr_bytes) override;
   void Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
@@ -86,7 +85,6 @@ public:
                                   optional_ptr<FileOpener> opener) override;
 
 private:
-  // FileSystem &parent_file_system;
 };
 
 } // namespace duckdb
