@@ -1,0 +1,23 @@
+# name: test/sql/xz_read_jsonl.test
+# description: Test reading JSONL from xz files
+# group: [sql]
+
+require zipfs
+
+require json
+
+query II
+SELECT * FROM read_json('xz://examples/test.jsonl.xz')
+----
+alice	30
+bob	25
+
+query I
+SELECT COUNT(*) FROM read_json('xz://examples/test.jsonl.xz')
+----
+2
+
+query I
+SELECT name FROM read_json('xz://examples/test.jsonl.xz') WHERE age > 27
+----
+alice

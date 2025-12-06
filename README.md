@@ -4,7 +4,7 @@
 [![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.4.2&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.4.2)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and [bzip2-compressed files](https://en.wikipedia.org/wiki/Bzip2).
+This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)), [bzip2-compressed files](https://en.wikipedia.org/wiki/Bzip2), and [xz-compressed files](https://en.wikipedia.org/wiki/XZ_Utils).
 
 ## Get started
 
@@ -75,6 +75,29 @@ SELECT * FROM read_csv('bz2://data/*.csv.bz2');
 
 Concatenated bzip2 streams (common in large compressed files) are handled automatically.
 
+## XZ/LZMA files
+
+To read an xz-compressed file:
+
+```SQL
+SELECT * FROM read_csv('xz://path/to/file.csv.xz');
+SELECT * FROM read_json('xz://path/to/file.jsonl.xz');
+```
+
+The `lzma://` prefix also works:
+
+```SQL
+SELECT * FROM read_csv('lzma://path/to/file.csv.xz');
+```
+
+Globbing is supported:
+
+```SQL
+SELECT * FROM read_csv('xz://data/*.csv.xz');
+```
+
+Concatenated xz streams are handled automatically.
+
 ### Performance considerations
 
 This extension is intended more for convience than high performance. It does not implement a file metadata cache as `tarfs` (on which this
@@ -116,3 +139,5 @@ Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
 [duckdb_tarfs](https://github.com/Maxxen/duckdb_tarfs) (MIT license)
 
 [bzip2](https://sourceware.org/bzip2/) Copyright 1996-2019 Julian Seward (BSD-style license)
+
+[XZ Utils/liblzma](https://tukaani.org/xz/) Public domain

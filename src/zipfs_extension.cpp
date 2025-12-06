@@ -5,6 +5,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
+#include "xz_file_system.hpp"
 #include "zip_file_system.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
@@ -12,12 +13,13 @@ namespace duckdb {
 
 static void LoadInternal(ExtensionLoader &loader) {
   std::string description =
-      "Support for reading files from zip and bz2 archives";
+      "Support for reading files from zip, bz2, and xz archives";
   loader.SetDescription(description);
 
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
   fs.RegisterSubSystem(make_uniq<Bz2FileSystem>());
+  fs.RegisterSubSystem(make_uniq<XzFileSystem>());
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
   config.AddExtensionOption(
