@@ -100,10 +100,33 @@ unique_ptr<FileHandle> XzFileSystem::OpenFile(const string &path,
   decompressed.reserve(compressed_size * 4);
 
   lzma_stream strm = LZMA_STREAM_INIT;
+  lzma_ret ret;
 
-  // Use lzma_stream_decoder with LZMA_CONCATENATED to handle concatenated
-  // streams
-  lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
+  // Use multi-threaded decoder for files > 1MB (worth the overhead)
+  // MT decoder works for both single-block and multi-block xz files
+  constexpr size_t MT_THRESHOLD = 1024 * 1024; // 1MB
+  bool use_mt = (total_read > MT_THRESHOLD);
+
+  if (use_mt) {
+    lzma_mt mt_options = {};
+    mt_options.flags = 0;
+    mt_options.block_size = 0; // Auto
+    mt_options.timeout = 0;    // No timeout
+    // Use 1/4 of physical memory for threading, unlimited for stop
+    mt_options.memlimit_threading = lzma_physmem() / 4;
+    mt_options.memlimit_stop = UINT64_MAX;
+    // Use all available CPU threads
+    mt_options.threads = lzma_cputhreads();
+    if (mt_options.threads == 0) {
+      mt_options.threads = 1;
+    }
+
+    ret = lzma_stream_decoder_mt(&strm, &mt_options);
+  } else {
+    // Single-threaded for small files
+    ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
+  }
+
   if (ret != LZMA_OK) {
     const char *msg;
     switch (ret) {
@@ -124,7 +147,8 @@ unique_ptr<FileHandle> XzFileSystem::OpenFile(const string &path,
   strm.next_in = compressed_data.get();
   strm.avail_in = total_read;
 
-  constexpr size_t CHUNK_SIZE = 256 * 1024; // 256KB chunks
+  // Use larger chunks for better throughput (1MB)
+  constexpr size_t CHUNK_SIZE = 1024 * 1024;
   std::vector<uint8_t> out_chunk(CHUNK_SIZE);
 
   lzma_action action = LZMA_RUN;
