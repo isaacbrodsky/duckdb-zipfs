@@ -75,6 +75,8 @@ SELECT * FROM read_csv('bz2://data/*.csv.bz2');
 
 Concatenated bzip2 streams (common in large compressed files) are handled automatically.
 
+Note: bzip2 decompression is single-threaded (libbz2 limitation). For large files, consider using xz format instead which supports multi-threaded decompression.
+
 ### Performance considerations
 
 This extension is intended more for convience than high performance. It does not implement a file metadata cache as `tarfs` (on which this

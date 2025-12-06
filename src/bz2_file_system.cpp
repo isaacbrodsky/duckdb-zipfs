@@ -123,7 +123,8 @@ Bz2FileSystem::OpenFile(const string &path, FileOpenFlags flags,
   strm.next_in = reinterpret_cast<char *>(compressed_data.get());
   strm.avail_in = UnsafeNumericCast<unsigned int>(total_read);
 
-  constexpr size_t CHUNK_SIZE = 256 * 1024; // 256KB chunks
+  // Use larger chunks for better throughput (1MB)
+  constexpr size_t CHUNK_SIZE = 1024 * 1024;
   std::vector<char> out_chunk(CHUNK_SIZE);
 
   while (true) {
