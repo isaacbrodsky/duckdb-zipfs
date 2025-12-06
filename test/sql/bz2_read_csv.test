@@ -1,0 +1,46 @@
+# name: test/sql/bz2_read_csv.test
+# description: test bz2 file system extension
+# group: [sql]
+
+require zipfs
+
+query III
+SELECT * FROM read_csv('bz2://examples/test.csv.bz2')
+----
+1	2	3
+4	5	6
+
+query I
+SELECT COUNT(*) FROM read_csv('bz2://examples/test.csv.bz2')
+----
+2
+
+# bzip2:// alias works too
+query III
+SELECT * FROM read_csv('bzip2://examples/test.csv.bz2')
+----
+1	2	3
+4	5	6
+
+query I
+SELECT COUNT(*) FROM read_csv('bzip2://examples/test.csv.bz2')
+----
+2
+
+# File not found
+statement error
+SELECT * FROM read_csv('bz2://examples/not_found.csv.bz2')
+----
+No files found that match the pattern
+
+# Glob support
+query I
+SELECT COUNT(*) FROM read_csv('bz2://examples/*.csv.bz2')
+----
+2
+
+# Glob with bzip2:// alias
+query I
+SELECT COUNT(*) FROM read_csv('bzip2://examples/*.csv.bz2')
+----
+2

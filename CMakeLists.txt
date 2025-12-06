@@ -8,6 +8,7 @@ set(TARGET_NAME zipfs)
 # remove or replace with other dependencies. Note that it should also be removed
 # from vcpkg.json to prevent needlessly installing it..
 find_package(miniz REQUIRED)
+find_package(BZip2 REQUIRED)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
@@ -15,13 +16,13 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 project(${TARGET_NAME})
 include_directories(src/include)
 
-set(EXTENSION_SOURCES src/zipfs_extension.cpp src/zip_file_system.cpp)
+set(EXTENSION_SOURCES src/zipfs_extension.cpp src/zip_file_system.cpp src/bz2_file_system.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
-target_link_libraries(${EXTENSION_NAME} miniz::miniz)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} miniz::miniz)
+target_link_libraries(${EXTENSION_NAME} miniz::miniz BZip2::BZip2)
+target_link_libraries(${LOADABLE_EXTENSION_NAME} miniz::miniz BZip2::BZip2)
 
 install(
   TARGETS ${EXTENSION_NAME}

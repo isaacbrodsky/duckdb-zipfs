@@ -1,0 +1,23 @@
+# name: test/sql/bz2_read_jsonl.test
+# description: test bz2 file system with JSON
+# group: [sql]
+
+require zipfs
+
+require json
+
+query II
+SELECT * FROM read_json('bz2://examples/test.jsonl.bz2')
+----
+alice	30
+bob	25
+
+query I
+SELECT COUNT(*) FROM read_json('bz2://examples/test.jsonl.bz2')
+----
+2
+
+query I
+SELECT name FROM read_json('bz2://examples/test.jsonl.bz2') WHERE age > 27
+----
+alice

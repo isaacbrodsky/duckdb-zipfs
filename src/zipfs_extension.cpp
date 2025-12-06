@@ -1,20 +1,23 @@
 #include "zipfs_extension.hpp"
-#include "zip_file_system.hpp"
+#include "bz2_file_system.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
+#include "zip_file_system.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 namespace duckdb {
 
 static void LoadInternal(ExtensionLoader &loader) {
-  std::string description = "Support for reading files from zip archives";
+  std::string description =
+      "Support for reading files from zip and bz2 archives";
   loader.SetDescription(description);
 
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
+  fs.RegisterSubSystem(make_uniq<Bz2FileSystem>());
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
   config.AddExtensionOption(
