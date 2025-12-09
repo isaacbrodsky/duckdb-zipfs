@@ -1,5 +1,5 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.4.1&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.4.1)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.4.3&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.4.3)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
@@ -72,7 +72,7 @@ export VCPKG_TOOLCHAIN_PATH=`pwd`/vcpkg/scripts/buildsystems/vcpkg.cmake
 Then:
 
 ```sh
-make -j 4 release
+GEN=ninja make release
 make test_release
 ```
 
