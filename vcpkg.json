@@ -1,6 +1,8 @@
 {
   "dependencies": [
-    "miniz"
+    "miniz",
+    "bzip2",
+    "liblzma"
   ],
   "vcpkg-configuration": {
     "registries": [

@@ -1,0 +1,47 @@
+# name: test/sql/xz_read_csv.test
+# description: Test reading CSV from xz files
+# group: [sql]
+
+require zipfs
+
+# Basic xz:// prefix reading
+query III
+SELECT * FROM read_csv('xz://examples/test.csv.xz')
+----
+1	2	3
+4	5	6
+
+query I
+SELECT COUNT(*) FROM read_csv('xz://examples/test.csv.xz')
+----
+2
+
+# Sum of first column
+query I
+SELECT SUM(column0) FROM read_csv('xz://examples/test.csv.xz')
+----
+5
+
+# lzma:// alias works too
+query III
+SELECT * FROM read_csv('lzma://examples/test.csv.xz')
+----
+1	2	3
+4	5	6
+
+query I
+SELECT COUNT(*) FROM read_csv('lzma://examples/test.csv.xz')
+----
+2
+
+# Glob with xz:// prefix
+query I
+SELECT COUNT(*) FROM read_csv('xz://examples/*.csv.xz')
+----
+2
+
+# Glob with lzma:// alias
+query I
+SELECT COUNT(*) FROM read_csv('lzma://examples/*.csv.xz')
+----
+2
