@@ -65,7 +65,7 @@ export VCPKG_TOOLCHAIN_PATH=`pwd`/vcpkg/scripts/buildsystems/vcpkg.cmake
 Then:
 
 ```sh
-make -j 4 release
+GEN=ninja make release
 make test_release
 ```
 
