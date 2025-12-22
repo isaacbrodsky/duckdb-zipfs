@@ -44,11 +44,11 @@ SET zipfs_split = "!!";
 SELECT * FROM 'zip://examples/a.zip!!b.csv'
 ```
 
-Using `zipfs_split` also means you can read other archives supported by libarchive:
+Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme)
 ```SQL
 SET zipfs_split = "!!";
 
-SELECT * FROM 'zip://examples/a.tar.gz!!b.csv'
+SELECT * FROM 'archive://examples/a.tar.gz!!b.csv'
 ```
 
 ## Performance considerations
@@ -82,15 +82,15 @@ duckdb-zipfs Copyright 2025 Isaac Brodsky. Licensed under the [MIT License](./LI
 
 [DuckDB](https://github.com/duckdb/duckdb) Copyright 2018-2022 Stichting DuckDB Foundation (MIT License)
 
-[libarchive](https://github.com/libarchive/libarchive)
-Copyright 2003-2018 Tim Kientzle
-(varying licenses, see repo)
+[miniz](https://github.com/richgel999/miniz)
+Copyright 2013-2014 RAD Game Tools and Valve Software
+Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+(MIT License)
 
 [DuckDB extension-template](https://github.com/duckdb/extension-template) Copyright 2018-2022 DuckDB Labs BV (MIT License)
 
 [duckdb_tarfs](https://github.com/Maxxen/duckdb_tarfs) (MIT license)
 
-Thanks to [miniz](https://github.com/richgel999/miniz)
-Copyright 2013-2014 RAD Game Tools and Valve Software
-Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
-(MIT License), which is no longer used in this extension.
+[libarchive](https://github.com/libarchive/libarchive)
+Copyright 2003-2018 Tim Kientzle
+(varying licenses, see repo)

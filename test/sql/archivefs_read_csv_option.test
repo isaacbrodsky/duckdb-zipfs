@@ -1,0 +1,83 @@
+# name: test/sql/archivefs_read_csv_option.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+statement ok
+SET zipfs_split = "!!";
+
+query III
+SELECT * FROM 'archive://examples/a.tar.gz!!a.csv'
+----
+1	2	3
+4	5	6
+7	8	9
+
+query I
+SELECT * FROM 'archive://examples/a.tar.gz!!b.csv'
+----
+99
+98
+97
+
+query I
+SELECT * FROM 'archive://examples/a.tar.gz!!/b.csv'
+----
+99
+98
+97
+
+query I
+SELECT hello FROM 'archive://examples/a.tar.gz!!nested_dir/some_file.csv'
+----
+world
+
+query I
+SELECT hello FROM 'archive://examples/a.tar.gz!!/nested_dir/some_file.csv'
+----
+world
+
+query III
+select * from read_csv('archive://examples/a.tar.gz!!*.csv', union_by_name = true);
+----
+1	2	3
+4	5	6
+7	8	9
+99	NULL	NULL
+98	NULL	NULL
+97	NULL	NULL
+
+query III
+select * from read_csv('archive://examples/a.tar.gz!!/*.csv', union_by_name = true);
+----
+1	2	3
+4	5	6
+7	8	9
+99	NULL	NULL
+98	NULL	NULL
+97	NULL	NULL
+
+# No files match within the zip file
+statement error
+select * from read_csv('archive://examples/a.tar.gz!!doesnt_exist*.csv');
+----
+No files found that match the pattern
+
+# Invalid file within the zip file
+statement error
+select * from read_csv('archive://examples/a.tar.gz!!doesnt_exist.csv');
+----
+Failed to find file
+
+# No !! after .zip
+statement error
+select * from read_csv('archive://examples/a.tar.gz/*.csv', union_by_name = true);
+----
+No files found that match the pattern
+
+# No .zip
+statement error
+select * from read_csv('archive://examples/README.md!!*.csv', union_by_name = true);
+----
+IO Error: Failed to init libarchive (read callback): Unrecognized archive format
