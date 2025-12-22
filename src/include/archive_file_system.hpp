@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef ENABLE_LIBARCHIVE
+
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include <archive.h>
@@ -80,3 +82,5 @@ private:
 };
 
 } // namespace duckdb
+
+#endif // ENABLE_LIBARCHIVE

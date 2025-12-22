@@ -44,7 +44,7 @@ SET zipfs_split = "!!";
 SELECT * FROM 'zip://examples/a.zip!!b.csv'
 ```
 
-Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme)
+Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchvie is not available on Windows)
 ```SQL
 SET zipfs_split = "!!";
 

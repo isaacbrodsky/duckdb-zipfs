@@ -6,6 +6,8 @@
 #include "duckdb/function/scalar/string_common.hpp"
 #include "duckdb/main/client_context.hpp"
 
+#ifdef ENABLE_LIBARCHIVE
+
 namespace duckdb {
 
 auto const ZIP_SEPARATOR = "/";
@@ -543,3 +545,5 @@ bool ArchiveFileSystem::FileExists(const string &filename,
 }
 
 } // namespace duckdb
+
+#endif // ENABLE_LIBARCHIVE

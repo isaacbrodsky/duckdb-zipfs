@@ -16,7 +16,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
+#ifdef ENABLE_LIBARCHIVE
   fs.RegisterSubSystem(make_uniq<ArchiveFileSystem>());
+#endif // ENABLE_LIBARCHIVE
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
   config.AddExtensionOption(

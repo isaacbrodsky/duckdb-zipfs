@@ -1,7 +1,10 @@
 {
   "dependencies": [
     "miniz",
-    "libarchive"
+    {
+      "name": "libarchive",
+      "platform": "!windows"
+    }
   ],
   "vcpkg-configuration": {
     "registries": [
