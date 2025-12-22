@@ -28,8 +28,8 @@ target_link_libraries(${LOADABLE_EXTENSION_NAME} miniz::miniz)
 if (ENABLE_LIBARCHIVE)
   target_link_libraries(${EXTENSION_NAME} LibArchive::LibArchive)
   target_link_libraries(${LOADABLE_EXTENSION_NAME} LibArchive::LibArchive)
-  target_compile_definitions(${EXTENSION_NAME} PRIVATE ENABLE_LIBARCHIVE)
-  target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE ENABLE_LIBARCHIVE)
+  target_compile_definitions(${EXTENSION_NAME} PRIVATE ENABLE_LIBARCHIVE=1)
+  target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE ENABLE_LIBARCHIVE=1)
 endif()
 
 install(
