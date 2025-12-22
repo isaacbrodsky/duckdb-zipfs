@@ -1,6 +1,7 @@
 #include "zipfs_extension.hpp"
 #include "zip_file_system.hpp"
 #include "archive_file_system.hpp"
+#include "noop_archive_file_system.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -18,6 +19,8 @@ static void LoadInternal(ExtensionLoader &loader) {
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
 #ifdef ENABLE_LIBARCHIVE
   fs.RegisterSubSystem(make_uniq<ArchiveFileSystem>());
+#else
+  fs.RegisterSubSystem(make_uniq<NoopArchiveFileSystem>());
 #endif // ENABLE_LIBARCHIVE
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
