@@ -41,14 +41,19 @@ You may use options to turn this behavior off and instead choose some string to 
 ```SQL
 SET zipfs_split = "!!";
 
-SELECT * FROM 'zip://examples/a.zip!!b.csv'
+SELECT * FROM 'zip://examples/a.zip!!b.csv';
 ```
 
 Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchvie is not available on Windows)
 ```SQL
 SET zipfs_split = "!!";
 
-SELECT * FROM 'archive://examples/a.tar.gz!!b.csv'
+SELECT * FROM 'archive://examples/a.tar.gz!!b.csv';
+```
+
+It is also possible to read from a variety of compressed file formats directly:
+```SQL
+SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 ```
 
 ## Performance considerations
