@@ -10,6 +10,20 @@
 
 namespace duckdb {
 
+la_ssize_t FileSystemZipReadFunc(struct archive *archive, void *clientData,
+                                 const void **buffer);
+
+la_int64_t FileSystemZipSeekFunc(struct archive *archive, void *clientData,
+                                 la_int64_t offset, int whence);
+
+int FileSystemZipOpenFunc(struct archive *archive, void *clientData);
+
+int FileSystemZipCloseFunc(struct archive *archive, void *clientData);
+
+void ReadArchiveEntryFully(struct archive *_a, struct archive_entry *entry,
+                           unique_ptr<data_t[]> *out_data,
+                           la_int64_t *out_size);
+
 const size_t BLOCK_SIZE = 1024 * 10;
 
 class LibArchiveHandle final {
@@ -27,6 +41,7 @@ public:
 
 class ArchiveFileHandle final : public FileHandle {
   friend class ArchiveFileSystem;
+  friend class RawArchiveFileSystem;
 
 public:
   ArchiveFileHandle(FileSystem &file_system, const string &path,
@@ -66,6 +81,35 @@ public:
   void Reset(FileHandle &handle) override;
   idx_t SeekPosition(FileHandle &handle) override;
   std::string GetName() const override { return "ArchiveFileSystem"; }
+
+  vector<OpenFileInfo> Glob(const string &path, FileOpener *opener) override;
+  bool FileExists(const string &filename,
+                  optional_ptr<FileOpener> opener) override;
+
+  bool CanHandleFile(const string &fpath) override;
+  bool OnDiskFile(FileHandle &handle) override;
+  bool CanSeek() override;
+
+  unique_ptr<FileHandle> OpenFile(const string &path, FileOpenFlags flags,
+                                  optional_ptr<FileOpener> opener) override;
+
+private:
+};
+
+class RawArchiveFileSystem final : public FileSystem {
+public:
+  explicit RawArchiveFileSystem() : FileSystem() {}
+
+  timestamp_t GetLastModifiedTime(FileHandle &handle) override;
+  FileType GetFileType(FileHandle &handle) override;
+  int64_t Read(FileHandle &handle, void *buffer, int64_t nr_bytes) override;
+  void Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
+            idx_t location) override;
+  int64_t GetFileSize(FileHandle &handle) override;
+  void Seek(FileHandle &handle, idx_t location) override;
+  void Reset(FileHandle &handle) override;
+  idx_t SeekPosition(FileHandle &handle) override;
+  std::string GetName() const override { return "RawArchiveFileSystem"; }
 
   vector<OpenFileInfo> Glob(const string &path, FileOpener *opener) override;
   bool FileExists(const string &filename,

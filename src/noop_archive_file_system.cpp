@@ -26,6 +26,22 @@ NoopArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
                                 "support. (Not supported on Windows)");
 }
 
+bool NoopRawArchiveFileSystem::CanHandleFile(const string &fpath) {
+  auto isArchive = fpath.size() > 13 && fpath.substr(0, 13) == "compressed://";
+  if (isArchive) {
+    throw NotImplementedException("duckdb-zip was not built with libarchive "
+                                  "support. (Not supported on Windows)");
+  }
+  return false;
+}
+
+unique_ptr<FileHandle>
+NoopRawArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
+                                   optional_ptr<FileOpener> opener) {
+  throw NotImplementedException("duckdb-zip was not built with libarchive "
+                                "support. (Not supported on Windows)");
+}
+
 } // namespace duckdb
 
 #endif // ENABLE_LIBARCHIVE

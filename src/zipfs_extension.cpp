@@ -19,8 +19,10 @@ static void LoadInternal(ExtensionLoader &loader) {
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
 #ifdef ENABLE_LIBARCHIVE
   fs.RegisterSubSystem(make_uniq<ArchiveFileSystem>());
+  fs.RegisterSubSystem(make_uniq<RawArchiveFileSystem>());
 #else
   fs.RegisterSubSystem(make_uniq<NoopArchiveFileSystem>());
+  fs.RegisterSubSystem(make_uniq<NoopRawArchiveFileSystem>());
 #endif // ENABLE_LIBARCHIVE
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());

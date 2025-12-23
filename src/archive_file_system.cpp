@@ -140,6 +140,46 @@ int FileSystemZipCloseFunc(struct archive *archive, void *clientData) {
   return ARCHIVE_OK;
 }
 
+void ReadArchiveEntryFully(struct archive *archive, struct archive_entry *entry,
+                           unique_ptr<data_t[]> *out_data,
+                           la_int64_t *out_size) {
+
+  if (archive_entry_size_is_set(entry)) {
+    *out_size = archive_entry_size(entry);
+    *out_data = make_uniq_array2<data_t>(*out_size);
+
+    auto read_bytes = archive_read_data(archive, out_data->get(), *out_size);
+    if (read_bytes < *out_size) {
+      throw IOException("Failed to read: %s", archive_error_string(archive));
+    }
+  } else {
+    *out_size = 0;
+    la_int64_t read = 0;
+
+    std::vector<std::tuple<data_t *, la_int64_t>> blocks;
+    auto data_block = new data_t[BLOCK_SIZE]();
+
+    while (read = archive_read_data(archive, data_block, BLOCK_SIZE),
+           read > 0) {
+      *out_size += read;
+      blocks.push_back(make_pair(data_block, read));
+      data_block = new data_t[BLOCK_SIZE]();
+    }
+
+    delete[] data_block;
+
+    *out_data = make_uniq_array2<data_t>(*out_size);
+    la_int64_t offset = 0;
+    for (auto &block_and_size : blocks) {
+      auto block = std::get<0>(block_and_size);
+      auto size = std::get<1>(block_and_size);
+      memcpy((*out_data).get() + offset, block, size);
+      offset += size;
+      delete[] block;
+    }
+  }
+}
+
 unique_ptr<FileHandle>
 ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
                             optional_ptr<FileOpener> opener) {
@@ -220,14 +260,9 @@ ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
         throw IOException("Failed to find file: %s", file_path);
       }
 
-      auto read_buf_size = archive_entry_size(entry);
-      auto read_buf = make_uniq_array2<data_t>(read_buf_size);
-
-      auto read_bytes =
-          archive_read_data(archive, read_buf.get(), read_buf_size);
-      if (read_bytes < read_buf_size) {
-        throw IOException("Failed to read: %s", archive_error_string(archive));
-      }
+      unique_ptr<data_t[]> read_buf;
+      la_int64_t read_buf_size;
+      ReadArchiveEntryFully(archive, entry, &read_buf, &read_buf_size);
 
       auto zip_file_handle = make_uniq<ArchiveFileHandle>(
           *this, path, flags, last_modified_time, has_last_modified_time,
