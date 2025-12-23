@@ -2,7 +2,7 @@
 [![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.4.3&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.4.3)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)).
+This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
 
 # Get started
 
@@ -41,7 +41,19 @@ You may use options to turn this behavior off and instead choose some string to 
 ```SQL
 SET zipfs_split = "!!";
 
-SELECT * FROM 'zip://examples/a.zip!!b.csv'
+SELECT * FROM 'zip://examples/a.zip!!b.csv';
+```
+
+Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchvie is not available on Windows)
+```SQL
+SET zipfs_split = "!!";
+
+SELECT * FROM 'archive://examples/a.tar.gz!!b.csv';
+```
+
+It is also possible to read from a variety of compressed file formats directly:
+```SQL
+SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 ```
 
 ## Performance considerations
@@ -83,3 +95,7 @@ Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
 [DuckDB extension-template](https://github.com/duckdb/extension-template) Copyright 2018-2022 DuckDB Labs BV (MIT License)
 
 [duckdb_tarfs](https://github.com/Maxxen/duckdb_tarfs) (MIT license)
+
+[libarchive](https://github.com/libarchive/libarchive)
+Copyright 2003-2018 Tim Kientzle
+(varying licenses, see repo)

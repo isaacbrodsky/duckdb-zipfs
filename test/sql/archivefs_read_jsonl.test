@@ -1,0 +1,25 @@
+# name: test/sql/archivefs_read_jsonl.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+require notwindows
+
+statement ok
+install json;
+
+statement ok
+load json;
+
+query I
+select * from read_json('compressed://examples/a.jsonl.gz', format='newline_delimited', compression='uncompressed');
+----
+a1
+a2
+
+query I
+select * from read_json('compressed://examples/a.jsonl.bz2', format='newline_delimited', compression='uncompressed');
+----
+a1
+a2

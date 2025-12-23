@@ -1,0 +1,69 @@
+# name: test/sql/archivefs_windows.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+require windows
+
+statement ok
+SET zipfs_split = "!!";
+
+statement error
+SELECT * FROM 'archive://examples/a.tar.gz!!a.csv'
+----
+duckdb-zip was not built with libarchive support.
+
+statement error
+SELECT * FROM 'archive://examples/a.tar.gz!!b.csv'
+----
+duckdb-zip was not built with libarchive support.
+
+statement error
+SELECT * FROM 'archive://examples/a.tar.gz!!/b.csv'
+----
+duckdb-zip was not built with libarchive support.
+
+statement error
+SELECT hello FROM 'archive://examples/a.tar.gz!!nested_dir/some_file.csv'
+----
+duckdb-zip was not built with libarchive support.
+
+statement error
+SELECT hello FROM 'archive://examples/a.tar.gz!!/nested_dir/some_file.csv'
+----
+duckdb-zip was not built with libarchive support.
+
+statement error
+select * from read_csv('archive://examples/a.tar.gz!!*.csv', union_by_name = true);
+----
+duckdb-zip was not built with libarchive support.
+
+statement error
+select * from read_csv('archive://examples/a.tar.gz!!/*.csv', union_by_name = true);
+----
+duckdb-zip was not built with libarchive support.
+
+# No files match within the zip file
+statement error
+select * from read_csv('archive://examples/a.tar.gz!!doesnt_exist*.csv');
+----
+duckdb-zip was not built with libarchive support.
+
+# Invalid file within the zip file
+statement error
+select * from read_csv('archive://examples/a.tar.gz!!doesnt_exist.csv');
+----
+duckdb-zip was not built with libarchive support.
+
+# No !! after .zip
+statement error
+select * from read_csv('archive://examples/a.tar.gz/*.csv', union_by_name = true);
+----
+duckdb-zip was not built with libarchive support.
+
+# No .zip
+statement error
+select * from read_csv('archive://examples/README.md!!*.csv', union_by_name = true);
+----
+duckdb-zip was not built with libarchive support.
