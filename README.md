@@ -24,6 +24,13 @@ SELECT * FROM 'zip://az://yourstorageaccount.blob.core.windows.net/yourcontainer
 
 ## File names
 
+| URL quick reference | Description
+| --- | ---
+| `zip://a.zip/*.csv` | Local zip file named `a.zip`, containing csv files.
+| `zip://http://example.com/a.zip/*.csv` | Web hosted zip file named `a.zip`, containing csv files.
+| `archive://a.tar.gz!!*.csv` | Local archive file named `a.tar.gz`, containg csv files.
+| `compressed://a.jsonl.bz2` | Local compressed ndjson file `a.jsonl.bz2`.
+
 File names passed into the `zip://` URL scheme are expected to end with `.zip`, which indicates the end of the zip file name. The path after
 that is taken to be the file path within the zip archive.
 
@@ -44,7 +51,7 @@ SET zipfs_split = "!!";
 SELECT * FROM 'zip://examples/a.zip!!b.csv';
 ```
 
-Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchvie is not available on Windows)
+Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchive is not available on Windows)
 ```SQL
 SET zipfs_split = "!!";
 
