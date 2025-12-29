@@ -13,7 +13,7 @@ namespace duckdb {
 bool NoopArchiveFileSystem::CanHandleFile(const string &fpath) {
   auto isArchive = fpath.size() > 10 && fpath.substr(0, 10) == "archive://";
   if (isArchive) {
-    throw NotImplementedException("duckdb-zip was not built with libarchive "
+    throw NotImplementedException("duckdb-zipfs was not built with libarchive "
                                   "support. (Not supported on Windows)");
   }
   return false;
@@ -22,14 +22,14 @@ bool NoopArchiveFileSystem::CanHandleFile(const string &fpath) {
 unique_ptr<FileHandle>
 NoopArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
                                 optional_ptr<FileOpener> opener) {
-  throw NotImplementedException("duckdb-zip was not built with libarchive "
+  throw NotImplementedException("duckdb-zipfs was not built with libarchive "
                                 "support. (Not supported on Windows)");
 }
 
 bool NoopRawArchiveFileSystem::CanHandleFile(const string &fpath) {
   auto isArchive = fpath.size() > 13 && fpath.substr(0, 13) == "compressed://";
   if (isArchive) {
-    throw NotImplementedException("duckdb-zip was not built with libarchive "
+    throw NotImplementedException("duckdb-zipfs was not built with libarchive "
                                   "support. (Not supported on Windows)");
   }
   return false;
@@ -38,7 +38,7 @@ bool NoopRawArchiveFileSystem::CanHandleFile(const string &fpath) {
 unique_ptr<FileHandle>
 NoopRawArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
                                    optional_ptr<FileOpener> opener) {
-  throw NotImplementedException("duckdb-zip was not built with libarchive "
+  throw NotImplementedException("duckdb-zipfs was not built with libarchive "
                                 "support. (Not supported on Windows)");
 }
 
