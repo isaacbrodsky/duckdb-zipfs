@@ -177,7 +177,7 @@ vector<OpenFileInfo> RawArchiveFileSystem::Glob(const string &path,
   // Get matching zip files
   if (has_glob) {
     auto matching_zips =
-        fs.GlobFiles(file_path, *context, FileGlobOptions::DISALLOW_EMPTY);
+        fs.GlobFiles(file_path, FileGlobOptions::DISALLOW_EMPTY);
     // TODO: Rewrite to include compressed:// prefix
 
     vector<OpenFileInfo> result;

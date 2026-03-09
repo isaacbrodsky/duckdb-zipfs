@@ -356,8 +356,7 @@ vector<OpenFileInfo> ArchiveFileSystem::Glob(const string &path,
   // Get matching zip files
   vector<OpenFileInfo> matching_zips;
   if (has_glob) {
-    matching_zips =
-        fs.GlobFiles(zip_path, *context, FileGlobOptions::DISALLOW_EMPTY);
+    matching_zips = fs.GlobFiles(zip_path, FileGlobOptions::DISALLOW_EMPTY);
   } else {
     // Normally, GlobFiles would be safe. However, when
     // there is no glob, we don't call it because it can mangle https:// URLs
