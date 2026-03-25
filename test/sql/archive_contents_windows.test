@@ -1,0 +1,22 @@
+# name: test/sql/archive_contents_windows.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+require windows
+
+statement error
+SELECT * FROM archive_contents('examples/a.zip');
+----
+duckdb-zipfs was not built with libarchive support.
+
+statement error
+select * from archive_contents('examples/a.tar.gz');
+----
+duckdb-zipfs was not built with libarchive support.
+
+statement error
+select * from archive_contents('examples/a.jsonl.gz');
+----
+duckdb-zipfs was not built with libarchive support.

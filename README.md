@@ -22,6 +22,11 @@ To read a file from azure blob storage (or other file system):
 SELECT * FROM 'zip://az://yourstorageaccount.blob.core.windows.net/yourcontainer/examples/a.zip/a.csv';
 ```
 
+To read the table of contents of a zip file:
+```SQL
+SELECT * FROM archive_contents('examples/a.zip');
+```
+
 ## File names
 
 | URL quick reference | Description
@@ -30,6 +35,11 @@ SELECT * FROM 'zip://az://yourstorageaccount.blob.core.windows.net/yourcontainer
 | `zip://http://example.com/a.zip/*.csv` | Web hosted zip file named `a.zip`, containing csv files.
 | `archive://a.tar.gz!!*.csv` | Local archive file named `a.tar.gz`, containg csv files.
 | `compressed://a.jsonl.bz2` | Local compressed ndjson file `a.jsonl.bz2`.
+
+| Function | Description
+| --- | ---
+| `zip_contents` | Read the table of contents of a zip file
+| `archive_contents` | Read the table of contents of an archive file
 
 File names passed into the `zip://` URL scheme are expected to end with `.zip`, which indicates the end of the zip file name. The path after
 that is taken to be the file path within the zip archive.
@@ -62,6 +72,12 @@ It is also possible to read from a variety of compressed file formats directly:
 ```SQL
 SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 ```
+
+## Archive vs zip
+
+This extension supports both zip files and archive files. The zip file support is using miniz, the archive file
+support uses libarchive. libarchive supports a wider range of compression algorithms and container formats.
+libarchive is not available on Windows and using them there will result in an error.
 
 ## Performance considerations
 
