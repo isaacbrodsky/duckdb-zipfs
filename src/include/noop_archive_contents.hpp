@@ -1,9 +1,7 @@
 #pragma once
 
-// #ifndef ENABLE_LIBARCHIVE
+#ifndef ENABLE_LIBARCHIVE
 
-#include <archive.h>
-#include <archive_entry.h>
 #include "utils.hpp"
 
 namespace duckdb {
@@ -21,4 +19,4 @@ NoopReadArchiveFunctionInit(ClientContext &context,
 
 } // namespace duckdb
 
-// #endif // ENABLE_LIBARCHIVE
+#endif // ENABLE_LIBARCHIVE
