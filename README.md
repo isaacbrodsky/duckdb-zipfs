@@ -4,6 +4,7 @@
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
 
+
 # Get started
 
 Load from the [community extensions repository](https://community-extensions.duckdb.org/extensions/zipfs.html):
