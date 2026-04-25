@@ -7,6 +7,11 @@
 
 namespace duckdb {
 
+auto const ZIP_SEPARATOR = "/";
+
+size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
+                             size_t n);
+
 class ZipFileHandle final : public FileHandle {
   friend class ZipFileSystem;
 

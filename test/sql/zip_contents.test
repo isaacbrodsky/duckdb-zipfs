@@ -1,0 +1,26 @@
+# name: test/sql/zip_contents.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+query III
+SELECT * FROM zip_contents('examples/a.zip');
+----
+nested_dir/	0	true
+nested_dir/some_file.jsonl	26	false
+nested_dir/some_file.csv	12	false
+a.csv	24	false
+a.jsonl	26	false
+b.csv	11	false
+b.jsonl	26	false
+
+statement error
+select * from zip_contents('examples/a.tar.gz');
+----
+IO Error: Could not open as zip file: failed finding central directory
+
+statement error
+select * from zip_contents('examples/a.jsonl.gz');
+----
+IO Error: Could not open as zip file: failed finding central directory

@@ -1,0 +1,34 @@
+# name: test/sql/archive_contents.test
+# description: test zipfs extension
+# group: [sql]
+
+require zipfs
+
+require notwindows
+
+query III
+SELECT * FROM archive_contents('examples/a.zip');
+----
+nested_dir/	0	true
+nested_dir/some_file.jsonl	26	false
+nested_dir/some_file.csv	12	false
+a.csv	24	false
+a.jsonl	26	false
+b.csv	11	false
+b.jsonl	26	false
+
+query III
+select * from archive_contents('examples/a.tar.gz');
+----
+nested_dir/	0	true
+nested_dir/some_file.jsonl	26	false
+nested_dir/some_file.csv	12	false
+a.csv	24	false
+a.jsonl	26	false
+b.csv	11	false
+b.jsonl	26	false
+
+statement error
+select * from archive_contents('examples/a.jsonl.gz');
+----
+IO Error: Failed to init libarchive (read callback): Unrecognized archive format

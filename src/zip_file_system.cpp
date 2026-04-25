@@ -8,8 +8,6 @@
 
 namespace duckdb {
 
-auto const ZIP_SEPARATOR = "/";
-
 // TODO: Something is incorrect about the type in make_uniq_array<...,
 // std::default_delete<DATA_TYPE>, ...>
 template <class DATA_TYPE>
