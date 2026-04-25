@@ -2,6 +2,9 @@
 #include "zip_file_system.hpp"
 #include "archive_file_system.hpp"
 #include "noop_archive_file_system.hpp"
+#include "zip_contents.hpp"
+#include "archive_contents.hpp"
+#include "noop_archive_contents.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -17,12 +20,22 @@ static void LoadInternal(ExtensionLoader &loader) {
 
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
+  loader.RegisterFunction(TableFunction("zip_contents", {LogicalType::VARCHAR},
+                                        ReadZipFunction, ReadZipFunctionBind,
+                                        ReadZipFunctionInit));
+
 #ifdef ENABLE_LIBARCHIVE
   fs.RegisterSubSystem(make_uniq<ArchiveFileSystem>());
   fs.RegisterSubSystem(make_uniq<RawArchiveFileSystem>());
+  loader.RegisterFunction(TableFunction(
+      "archive_contents", {LogicalType::VARCHAR}, ReadArchiveFunction,
+      ReadArchiveFunctionBind, ReadArchiveFunctionInit));
 #else
   fs.RegisterSubSystem(make_uniq<NoopArchiveFileSystem>());
   fs.RegisterSubSystem(make_uniq<NoopRawArchiveFileSystem>());
+  loader.RegisterFunction(TableFunction(
+      "archive_contents", {LogicalType::VARCHAR}, NoopReadArchiveFunction,
+      NoopReadArchiveFunctionBind, NoopReadArchiveFunctionInit));
 #endif // ENABLE_LIBARCHIVE
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
