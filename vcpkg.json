@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "miniz",
+    "zlib",
     {
       "name": "libarchive",
       "platform": "!windows"

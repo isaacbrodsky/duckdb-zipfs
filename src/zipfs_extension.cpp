@@ -52,6 +52,15 @@ static void LoadInternal(ExtensionLoader &loader) {
       "the file path within the zip. Will be removed from the zip file name. "
       "Overrides zipfs_extension. Defaults to NULL.",
       LogicalType::VARCHAR, Value(LogicalType::VARCHAR));
+  config.AddExtensionOption(
+      "zipfs_seek_threshold",
+      "Members larger than this many uncompressed bytes use zran-based random "
+      "access instead of full buffering.",
+      LogicalType::BIGINT, Value::BIGINT(268435456));
+  config.AddExtensionOption(
+      "zipfs_zran_span",
+      "Spacing between zran access points in uncompressed bytes.",
+      LogicalType::BIGINT, Value::BIGINT(1048576));
 }
 
 void ZipfsExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }

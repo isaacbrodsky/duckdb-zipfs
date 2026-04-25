@@ -1,0 +1,46 @@
+# name: test/sql/zipfs_seek_parquet.test
+# description: test seekable parquet reads inside zip members
+# group: [sql]
+
+require zipfs
+
+require parquet
+
+statement ok
+SET zipfs_seek_threshold = 1;
+
+statement ok
+SET zipfs_zran_span = 64;
+
+query I
+SELECT count(*) FROM 'zip://examples/parquet_seek_deflated.zip/data.parquet'
+----
+1000
+
+query I
+SELECT sum(id) FROM 'zip://examples/parquet_seek_deflated.zip/data.parquet'
+----
+499500
+
+query II
+SELECT id, grp FROM 'zip://examples/parquet_seek_deflated.zip/data.parquet' ORDER BY id LIMIT 3
+----
+0	g0
+1	g1
+2	g2
+
+statement ok
+SET zipfs_seek_threshold = 268435456;
+
+statement ok
+SET zipfs_zran_span = 1048576;
+
+query I
+SELECT count(*) FROM 'zip://examples/parquet_seek_stored.zip/data.parquet'
+----
+1000
+
+query I
+SELECT sum(id) FROM 'zip://examples/parquet_seek_stored.zip/data.parquet'
+----
+499500

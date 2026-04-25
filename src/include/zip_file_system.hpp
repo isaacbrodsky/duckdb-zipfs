@@ -2,36 +2,14 @@
 
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
+#include "zip_member_handle.hpp"
 #include <miniz/miniz.h>
 #include <miniz/miniz_zip.h>
 
 namespace duckdb {
 
-auto const ZIP_SEPARATOR = "/";
-
 size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
                              size_t n);
-
-class ZipFileHandle final : public FileHandle {
-  friend class ZipFileSystem;
-
-public:
-  ZipFileHandle(FileSystem &file_system, const string &path,
-                FileOpenFlags flags, unique_ptr<FileHandle> inner_handle_p,
-                const mz_zip_archive_file_stat &file_stat,
-                unique_ptr<data_t[]> data)
-      : FileHandle(file_system, path, flags),
-        inner_handle(std::move(inner_handle_p)), file_stat(file_stat),
-        data(std::move(data)), seek_offset(0) {}
-
-  void Close() override;
-
-private:
-  unique_ptr<FileHandle> inner_handle;
-  mz_zip_archive_file_stat file_stat;
-  unique_ptr<data_t[]> data;
-  idx_t seek_offset;
-};
 
 class ZipStreamFileHandle final : public FileHandle {
   friend class ZipStreamFileSystem;
@@ -86,8 +64,6 @@ public:
 
   unique_ptr<FileHandle> OpenFile(const string &path, FileOpenFlags flags,
                                   optional_ptr<FileOpener> opener) override;
-
-private:
 };
 
 class ZipStreamFileSystem final : public FileSystem {
@@ -114,8 +90,6 @@ public:
 
   unique_ptr<FileHandle> OpenFile(const string &path, FileOpenFlags flags,
                                   optional_ptr<FileOpener> opener) override;
-
-private:
 };
 
 } // namespace duckdb

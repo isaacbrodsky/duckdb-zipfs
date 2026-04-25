@@ -2,9 +2,9 @@
 
 #ifdef ENABLE_LIBARCHIVE
 
+#include "utils.hpp"
 #include <archive.h>
 #include <archive_entry.h>
-#include "utils.hpp"
 
 namespace duckdb {
 

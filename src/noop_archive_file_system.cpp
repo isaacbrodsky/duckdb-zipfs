@@ -1,8 +1,8 @@
 #include "noop_archive_file_system.hpp"
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/file_opener.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/function/scalar/string_common.hpp"
 #include "duckdb/main/client_context.hpp"
 

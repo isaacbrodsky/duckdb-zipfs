@@ -1,8 +1,8 @@
 #pragma once
 
+#include "utils.hpp"
 #include <miniz/miniz.h>
 #include <miniz/miniz_zip.h>
-#include "utils.hpp"
 
 namespace duckdb {
 
