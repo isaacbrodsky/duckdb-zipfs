@@ -4,9 +4,9 @@
 
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
+#include "utils.hpp"
 #include <archive.h>
 #include <archive_entry.h>
-#include "utils.hpp"
 
 namespace duckdb {
 

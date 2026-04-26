@@ -1,15 +1,15 @@
 #include "zipfs_extension.hpp"
-#include "zip_file_system.hpp"
-#include "archive_file_system.hpp"
-#include "noop_archive_file_system.hpp"
-#include "zip_contents.hpp"
 #include "archive_contents.hpp"
-#include "noop_archive_contents.hpp"
+#include "archive_file_system.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
+#include "noop_archive_contents.hpp"
+#include "noop_archive_file_system.hpp"
+#include "zip_contents.hpp"
+#include "zip_file_system.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 namespace duckdb {
@@ -20,6 +20,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
+  fs.RegisterSubSystem(make_uniq<ZipStreamFileSystem>());
   loader.RegisterFunction(TableFunction("zip_contents", {LogicalType::VARCHAR},
                                         ReadZipFunction, ReadZipFunctionBind,
                                         ReadZipFunctionInit));
@@ -51,6 +52,15 @@ static void LoadInternal(ExtensionLoader &loader) {
       "the file path within the zip. Will be removed from the zip file name. "
       "Overrides zipfs_extension. Defaults to NULL.",
       LogicalType::VARCHAR, Value(LogicalType::VARCHAR));
+  config.AddExtensionOption(
+      "zipfs_seek_threshold",
+      "Members larger than this many uncompressed bytes use zran-based random "
+      "access instead of full buffering.",
+      LogicalType::BIGINT, Value::BIGINT(268435456));
+  config.AddExtensionOption(
+      "zipfs_zran_span",
+      "Spacing between zran access points in uncompressed bytes.",
+      LogicalType::BIGINT, Value::BIGINT(1048576));
 }
 
 void ZipfsExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
