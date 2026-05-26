@@ -1,0 +1,38 @@
+# name: test/sql/zipstream_read_csv.test
+# description: test zipstream support in zipfs extension
+# group: [sql]
+
+require zipfs
+
+query III
+SELECT * FROM read_csv('zipstream://examples/a.zip/a.csv')
+----
+1	2	3
+4	5	6
+7	8	9
+
+query III
+SELECT * FROM read_csv('zipstream://examples/a.zip/*.csv', union_by_name = true)
+----
+1	2	3
+4	5	6
+7	8	9
+99	NULL	NULL
+98	NULL	NULL
+97	NULL	NULL
+
+query IIII
+SELECT * FROM read_csv('zipstream://examples/csv_only.zip', union_by_name = true)
+----
+1	2	3	NULL
+4	5	6	NULL
+7	8	9	NULL
+99	NULL	NULL	NULL
+98	NULL	NULL	NULL
+97	NULL	NULL	NULL
+NULL	NULL	NULL	world
+
+statement error
+SELECT * FROM read_csv('zipstream://examples/a.zip/doesnt_exist.csv')
+----
+Failed to find file

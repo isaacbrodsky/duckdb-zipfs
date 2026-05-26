@@ -1,0 +1,29 @@
+# name: test/sql/zipstream_read_jsonl.test
+# description: test zipstream json support in zipfs extension
+# group: [sql]
+
+require zipfs
+
+query I
+install json;
+load json;
+select * from read_json('zipstream://examples/a.zip/*.jsonl', union_by_name = true);
+----
+a1
+a2
+b1
+b2
+
+query I
+install json;
+load json;
+select * from read_json('zipstream://examples/*.zip/*.jsonl', union_by_name = true);
+----
+a1
+a2
+b1
+b2
+a1
+a2
+b1
+b2
