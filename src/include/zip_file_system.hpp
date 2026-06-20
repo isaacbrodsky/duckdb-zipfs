@@ -4,6 +4,7 @@
 #include "duckdb/common/virtual_file_system.hpp"
 #include <miniz/miniz.h>
 #include <miniz/miniz_zip.h>
+#include <atomic>
 #include <mutex>
 #include "utils.hpp"
 
@@ -59,7 +60,9 @@ private:
   mz_uint file_index;
   mz_zip_reader_extract_iter_state *iter; // current streaming iterator
   idx_t stream_pos;                       // decompressed bytes consumed
-  idx_t seek_offset;                      // logical cursor for sequential reads
+  // logical cursor for sequential reads; atomic because the FileSystem
+  // Seek/Reset/SeekPosition entry points touch it without holding stream_lock.
+  std::atomic<idx_t> seek_offset;
   bool stream_finished;                   // iterator reached validated EOF
   unique_ptr<data_t[]> scratch;           // discard buffer for forward seeks
   std::mutex stream_lock;

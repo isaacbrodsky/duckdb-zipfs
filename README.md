@@ -92,7 +92,9 @@ uncompressed size, so e.g. a 100 GB CSV inside a zip can be read on a machine wi
 
 This works best for sequential readers (`read_csv`, `read_json`/NDJSON), which read forward in a single pass — these are `O(n)` time with
 bounded memory. Random access is still supported: forward seeks decompress-and-discard, while backward seeks restart the decompression
-stream from the start of the entry. Formats that seek heavily (e.g. Parquet) therefore work but can be slow inside an archive.
+stream from the start of the entry. Formats that seek heavily (e.g. Parquet) therefore work but can be slow inside an archive. Because each
+open file keeps a single decompression stream, reads on one handle are serialized and out-of-order/backward access re-decompresses from the
+start, so reading an archived file is effectively single-threaded — extract large Parquet to plain storage first if you need parallel scans.
 
 For archive entries that do not record their uncompressed size (raw `compressed://` gzip/bz2), the size is determined by a one-time
 streaming pass that discards the data, which keeps memory bounded but decompresses the data twice (once to size, once to read). Entries in

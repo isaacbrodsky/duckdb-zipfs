@@ -6,6 +6,7 @@
 #include "duckdb/common/virtual_file_system.hpp"
 #include <archive.h>
 #include <archive_entry.h>
+#include <atomic>
 #include <mutex>
 #include "utils.hpp"
 
@@ -98,7 +99,9 @@ private:
 
   struct archive *archive; // current open decompression stream (or nullptr)
   idx_t stream_pos;        // decompressed bytes consumed from current stream
-  idx_t seek_offset;       // logical cursor for sequential reads
+  // logical cursor for sequential reads; atomic because the FileSystem
+  // Seek/Reset/SeekPosition entry points touch it without holding stream_lock.
+  std::atomic<idx_t> seek_offset;
   int64_t sz;              // uncompressed size, or -1 if not yet known
   unique_ptr<data_t[]> scratch; // discard buffer for forward seeks / size probe
   std::mutex stream_lock;
