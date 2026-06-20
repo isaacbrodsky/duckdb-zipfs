@@ -89,13 +89,7 @@ static pair<string, string> SplitArchivePath(const string &path,
 }
 
 //------------------------------------------------------------------------------
-// Zip File Handle
-//------------------------------------------------------------------------------
-
-void ArchiveFileHandle::Close() {}
-
-//------------------------------------------------------------------------------
-// Zip File System
+// libarchive callbacks
 //------------------------------------------------------------------------------
 
 bool ArchiveFileSystem::CanHandleFile(const string &fpath) {
@@ -140,45 +134,161 @@ int FileSystemZipCloseFunc(struct archive *archive, void *clientData) {
   return ARCHIVE_OK;
 }
 
-void ReadArchiveEntryFully(struct archive *archive, struct archive_entry *entry,
-                           unique_ptr<data_t[]> *out_data,
-                           la_int64_t *out_size) {
+//------------------------------------------------------------------------------
+// Streaming Archive File Handle
+//------------------------------------------------------------------------------
 
-  if (archive_entry_size_is_set(entry)) {
-    *out_size = archive_entry_size(entry);
-    *out_data = make_uniq_array2<data_t>(*out_size);
+ArchiveFileHandle::~ArchiveFileHandle() { CloseStream(); }
 
-    auto read_bytes = archive_read_data(archive, out_data->get(), *out_size);
-    if (read_bytes < *out_size) {
-      throw IOException("Failed to read: %s", archive_error_string(archive));
-    }
-  } else {
-    *out_size = 0;
-    la_int64_t read = 0;
+void ArchiveFileHandle::Close() { CloseStream(); }
 
-    std::vector<std::tuple<data_t *, la_int64_t>> blocks;
-    auto data_block = new data_t[BLOCK_SIZE]();
-
-    while (read = archive_read_data(archive, data_block, BLOCK_SIZE),
-           read > 0) {
-      *out_size += read;
-      blocks.push_back(make_pair(data_block, read));
-      data_block = new data_t[BLOCK_SIZE]();
-    }
-
-    delete[] data_block;
-
-    *out_data = make_uniq_array2<data_t>(*out_size);
-    la_int64_t offset = 0;
-    for (auto &block_and_size : blocks) {
-      auto block = std::get<0>(block_and_size);
-      auto size = std::get<1>(block_and_size);
-      memcpy((*out_data).get() + offset, block, size);
-      offset += size;
-      delete[] block;
-    }
+void ArchiveFileHandle::CloseStream() {
+  if (archive) {
+    archive_read_free(archive);
+    archive = nullptr;
   }
 }
+
+void ArchiveFileHandle::InitStream() {
+  CloseStream();
+
+  // Rewind the underlying compressed file so libarchive re-reads from the start.
+  lib_handle->inner_handle->Seek(0);
+
+  archive = archive_read_new();
+  if (archive_read_support_filter_all(archive)) {
+    auto err = string(archive_error_string(archive));
+    CloseStream();
+    throw IOException("Failed to init libarchive (filter all): %s", err);
+  }
+  auto format_result = raw_format ? archive_read_support_format_raw(archive)
+                                  : archive_read_support_format_all(archive);
+  if (format_result) {
+    auto err = string(archive_error_string(archive));
+    CloseStream();
+    throw IOException("Failed to init libarchive (format): %s", err);
+  }
+  if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
+    auto err = string(archive_error_string(archive));
+    CloseStream();
+    throw IOException("Failed to init libarchive (seek callback): %s", err);
+  }
+  if (archive_read_open(archive, lib_handle.get(), &FileSystemZipOpenFunc,
+                        &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
+    auto err = string(archive_error_string(archive));
+    CloseStream();
+    throw IOException("Failed to init libarchive (read callback): %s", err);
+  }
+
+  struct archive_entry *entry = archive_entry_new2(archive);
+  bool found = false;
+  while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
+    if (raw_format) {
+      found = true;
+      break;
+    }
+    if (strcmp(archive_entry_pathname(entry), entry_name.c_str()) == 0) {
+      found = true;
+      break;
+    }
+  }
+  if (found && sz < 0 && archive_entry_size_is_set(entry)) {
+    sz = archive_entry_size(entry);
+  }
+  archive_entry_free(entry);
+
+  if (!found) {
+    CloseStream();
+    throw IOException("Failed to find file: %s", entry_name);
+  }
+
+  stream_pos = 0;
+}
+
+int64_t ArchiveFileHandle::ReadStream(void *buffer, int64_t nr_bytes) {
+  if (!archive) {
+    InitStream();
+  }
+  int64_t total = 0;
+  auto out = static_cast<char *>(buffer);
+  while (total < nr_bytes) {
+    auto read_bytes = archive_read_data(
+        archive, out + total, UnsafeNumericCast<size_t>(nr_bytes - total));
+    if (read_bytes < 0) {
+      throw IOException("Failed to read: %s", archive_error_string(archive));
+    }
+    if (read_bytes == 0) {
+      break; // EOF
+    }
+    total += read_bytes;
+  }
+  stream_pos += UnsafeNumericCast<idx_t>(total);
+  return total;
+}
+
+void ArchiveFileHandle::SeekTo(idx_t target) {
+  // A backwards seek (or no open stream) requires re-decompressing from start.
+  if (!archive || target < stream_pos) {
+    InitStream();
+  }
+  while (stream_pos < target) {
+    auto want = MinValue<idx_t>(UnsafeNumericCast<idx_t>(BLOCK_SIZE),
+                                target - stream_pos);
+    auto read_bytes = archive_read_data(archive, scratch.get(), want);
+    if (read_bytes < 0) {
+      throw IOException("Failed to read: %s", archive_error_string(archive));
+    }
+    if (read_bytes == 0) {
+      break; // EOF before reaching target
+    }
+    stream_pos += UnsafeNumericCast<idx_t>(read_bytes);
+  }
+}
+
+int64_t ArchiveFileHandle::ReadBytes(void *buffer, int64_t nr_bytes) {
+  std::lock_guard<std::mutex> lock(stream_lock);
+  SeekTo(seek_offset);
+  auto n = ReadStream(buffer, nr_bytes);
+  seek_offset += UnsafeNumericCast<idx_t>(n);
+  return n;
+}
+
+void ArchiveFileHandle::ReadBytesAt(void *buffer, int64_t nr_bytes,
+                                    idx_t location) {
+  std::lock_guard<std::mutex> lock(stream_lock);
+  SeekTo(location);
+  ReadStream(buffer, nr_bytes);
+}
+
+int64_t ArchiveFileHandle::Size() {
+  std::lock_guard<std::mutex> lock(stream_lock);
+  if (sz < 0) {
+    // The entry does not record its uncompressed size (e.g. raw gzip/bz2).
+    // Determine it by streaming through the data once, discarding it. This
+    // keeps memory bounded even for entries larger than memory.
+    InitStream();
+    if (sz < 0) {
+      idx_t total = 0;
+      while (true) {
+        auto read_bytes = archive_read_data(archive, scratch.get(), BLOCK_SIZE);
+        if (read_bytes < 0) {
+          throw IOException("Failed to read: %s", archive_error_string(archive));
+        }
+        if (read_bytes == 0) {
+          break;
+        }
+        total += UnsafeNumericCast<idx_t>(read_bytes);
+      }
+      stream_pos = total;
+      sz = UnsafeNumericCast<int64_t>(total);
+    }
+  }
+  return sz;
+}
+
+//------------------------------------------------------------------------------
+// Archive File System (archive://)
+//------------------------------------------------------------------------------
 
 unique_ptr<FileHandle>
 ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
@@ -204,15 +314,11 @@ ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     return handle;
   }
 
-  auto normalized_file_path = StringUtil::Replace(
-      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
-
   if (!handle->CanSeek()) {
     // TODO: Buffer?
     throw IOException("Cannot seek");
   }
 
-  idx_t size = handle->GetFileSize();
   timestamp_t last_modified_time;
   bool has_last_modified_time = true;
   try {
@@ -223,102 +329,40 @@ ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   auto file_type = fs.GetFileType(*handle);
   auto on_disk_file = handle->OnDiskFile();
 
-  struct archive *archive = archive_read_new();
-  try {
-    if (archive_read_support_filter_all(archive)) {
-      throw IOException("Failed to init libarchive (filter all): %s",
-                        archive_error_string(archive));
-    }
-
-    if (archive_read_support_format_all(archive)) {
-      throw IOException("Failed to init libarchive (format all): %s",
-                        archive_error_string(archive));
-    }
-    unique_ptr<LibArchiveHandle> zipHandle =
-        make_uniq<LibArchiveHandle>(std::move(handle));
-    // TODO: Add skip?
-    if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
-      throw IOException("Failed to init libarchive (seek callback): %s",
-                        archive_error_string(archive));
-    }
-    if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
-                          &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
-      throw IOException("Failed to init libarchive (read callback): %s",
-                        archive_error_string(archive));
-    }
-    struct archive_entry *entry = archive_entry_new2(archive);
-    try {
-      bool found = false;
-      while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
-        auto pathName = archive_entry_pathname(entry);
-        if (strcmp(pathName, file_path.c_str()) == 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        throw IOException("Failed to find file: %s", file_path);
-      }
-
-      unique_ptr<data_t[]> read_buf;
-      la_int64_t read_buf_size;
-      ReadArchiveEntryFully(archive, entry, &read_buf, &read_buf_size);
-
-      auto zip_file_handle = make_uniq<ArchiveFileHandle>(
-          *this, path, flags, last_modified_time, has_last_modified_time,
-          file_type, on_disk_file, read_buf_size, std::move(read_buf));
-
-      archive_entry_free(entry);
-      archive_read_free(archive);
-
-      return zip_file_handle;
-    } catch (Exception &ex2) {
-      archive_entry_free(entry);
-      throw;
-    }
-  } catch (Exception &ex) {
-    archive_read_free(archive);
-    throw;
-  }
+  auto lib_handle = make_uniq<LibArchiveHandle>(std::move(handle));
+  auto archive_file_handle = make_uniq<ArchiveFileHandle>(
+      *this, path, flags, last_modified_time, has_last_modified_time, file_type,
+      on_disk_file, std::move(lib_handle), /*raw_format=*/false, file_path);
+  // Open the decompression stream now so a missing entry fails fast and the
+  // uncompressed size is captured if the archive records it.
+  archive_file_handle->InitStream();
+  return archive_file_handle;
 }
 
 void ArchiveFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
                              idx_t location) {
-  auto &t_handle = handle.Cast<ArchiveFileHandle>();
-  auto remaining_bytes = t_handle.sz - location;
-  auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-  memcpy(buffer, t_handle.data.get() + location, to_read);
+  handle.Cast<ArchiveFileHandle>().ReadBytesAt(buffer, nr_bytes, location);
 }
 
 int64_t ArchiveFileSystem::Read(FileHandle &handle, void *buffer,
                                 int64_t nr_bytes) {
-  auto &t_handle = handle.Cast<ArchiveFileHandle>();
-  auto position = t_handle.seek_offset;
-  auto remaining_bytes = t_handle.sz - position;
-  auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-  memcpy(buffer, t_handle.data.get() + position, to_read);
-  t_handle.seek_offset += to_read;
-  return to_read;
+  return handle.Cast<ArchiveFileHandle>().ReadBytes(buffer, nr_bytes);
 }
 
 int64_t ArchiveFileSystem::GetFileSize(FileHandle &handle) {
-  auto &t_handle = handle.Cast<ArchiveFileHandle>();
-  return UnsafeNumericCast<int64_t>(t_handle.sz);
+  return handle.Cast<ArchiveFileHandle>().Size();
 }
 
 void ArchiveFileSystem::Seek(FileHandle &handle, idx_t location) {
-  auto &t_handle = handle.Cast<ArchiveFileHandle>();
-  t_handle.seek_offset = location;
+  handle.Cast<ArchiveFileHandle>().seek_offset = location;
 }
 
 void ArchiveFileSystem::Reset(FileHandle &handle) {
-  auto &t_handle = handle.Cast<ArchiveFileHandle>();
-  t_handle.seek_offset = 0;
+  handle.Cast<ArchiveFileHandle>().seek_offset = 0;
 }
 
 idx_t ArchiveFileSystem::SeekPosition(FileHandle &handle) {
-  auto &t_handle = handle.Cast<ArchiveFileHandle>();
-  return t_handle.seek_offset;
+  return handle.Cast<ArchiveFileHandle>().seek_offset;
 }
 
 bool ArchiveFileSystem::CanSeek() { return true; }
@@ -390,8 +434,6 @@ vector<OpenFileInfo> ArchiveFileSystem::Glob(const string &path,
     if (!archive_handle->CanSeek()) {
       continue; // Skip unseekable files
     }
-
-    idx_t size = archive_handle->GetFileSize();
 
     struct archive *archive = archive_read_new();
     try {
@@ -512,9 +554,6 @@ bool ArchiveFileSystem::FileExists(const string &filename,
     return false;
   }
 
-  auto normalized_file_path = StringUtil::Replace(
-      file_path, fs.PathSeparator(file_path), ZIP_SEPARATOR);
-
   auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
   if (!handle) {
     return false;
@@ -524,8 +563,6 @@ bool ArchiveFileSystem::FileExists(const string &filename,
     // TODO: Buffer?
     return false;
   }
-
-  idx_t size = handle->GetFileSize();
 
   struct archive *archive = archive_read_new();
   try {

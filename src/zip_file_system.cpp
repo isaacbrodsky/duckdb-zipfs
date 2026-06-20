@@ -8,16 +8,6 @@
 
 namespace duckdb {
 
-// TODO: Something is incorrect about the type in make_uniq_array<...,
-// std::default_delete<DATA_TYPE>, ...>
-template <class DATA_TYPE>
-inline unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>, true>
-make_uniq_array2(size_t n) // NOLINT: mimic std style
-{
-  return unique_ptr<DATA_TYPE[], std::default_delete<DATA_TYPE[]>, true>(
-      new DATA_TYPE[n]());
-}
-
 //------------------------------------------------------------------------------
 // Zip Utilities
 //------------------------------------------------------------------------------
@@ -94,10 +84,93 @@ static pair<string, string> SplitArchivePath(const string &path,
 }
 
 //------------------------------------------------------------------------------
-// Zip File Handle
+// Streaming Zip File Handle
 //------------------------------------------------------------------------------
 
-void ZipFileHandle::Close() { inner_handle->Close(); }
+ZipFileHandle::~ZipFileHandle() {
+  CloseStream();
+  if (zip_inited) {
+    mz_zip_reader_end(&zip);
+    zip_inited = false;
+  }
+}
+
+void ZipFileHandle::Close() {
+  CloseStream();
+  if (zip_inited) {
+    mz_zip_reader_end(&zip);
+    zip_inited = false;
+  }
+  if (inner_handle) {
+    inner_handle->Close();
+  }
+}
+
+void ZipFileHandle::CloseStream() {
+  if (iter) {
+    mz_zip_reader_extract_iter_free(iter);
+    iter = nullptr;
+  }
+}
+
+void ZipFileHandle::InitStream() {
+  CloseStream();
+  iter = mz_zip_reader_extract_iter_new(&zip, file_index, 0);
+  if (!iter) {
+    throw IOException("Could not start streaming zip entry: %s",
+                      mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+  }
+  stream_pos = 0;
+}
+
+int64_t ZipFileHandle::ReadStream(void *buffer, int64_t nr_bytes) {
+  if (!iter) {
+    InitStream();
+  }
+  int64_t total = 0;
+  auto out = static_cast<char *>(buffer);
+  while (total < nr_bytes) {
+    size_t got = mz_zip_reader_extract_iter_read(
+        iter, out + total, UnsafeNumericCast<size_t>(nr_bytes - total));
+    if (got == 0) {
+      break; // EOF
+    }
+    total += UnsafeNumericCast<int64_t>(got);
+  }
+  stream_pos += UnsafeNumericCast<idx_t>(total);
+  return total;
+}
+
+void ZipFileHandle::SeekTo(idx_t target) {
+  // A backwards seek (or no open iterator) requires re-inflating from start.
+  if (!iter || target < stream_pos) {
+    InitStream();
+  }
+  while (stream_pos < target) {
+    auto want = MinValue<idx_t>(UnsafeNumericCast<idx_t>(ZIP_BLOCK_SIZE),
+                                target - stream_pos);
+    size_t got = mz_zip_reader_extract_iter_read(iter, scratch.get(), want);
+    if (got == 0) {
+      break; // EOF before reaching target
+    }
+    stream_pos += UnsafeNumericCast<idx_t>(got);
+  }
+}
+
+int64_t ZipFileHandle::ReadBytes(void *buffer, int64_t nr_bytes) {
+  std::lock_guard<std::mutex> lock(stream_lock);
+  SeekTo(seek_offset);
+  auto n = ReadStream(buffer, nr_bytes);
+  seek_offset += UnsafeNumericCast<idx_t>(n);
+  return n;
+}
+
+void ZipFileHandle::ReadBytesAt(void *buffer, int64_t nr_bytes,
+                                idx_t location) {
+  std::lock_guard<std::mutex> lock(stream_lock);
+  SeekTo(location);
+  ReadStream(buffer, nr_bytes);
+}
 
 //------------------------------------------------------------------------------
 // Zip File System
@@ -149,91 +222,84 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 
   idx_t size = handle->GetFileSize();
 
-  mz_zip_archive zip;
-  mz_zip_zero_struct(&zip);
-  zip.m_pRead = &FileSystemZipReadFunc;
-  zip.m_pIO_opaque = handle.get();
+  // Construct the streaming handle up-front so the central-directory reader can
+  // reference the (moved) inner file handle for the lifetime of the entry.
+  auto zip_file_handle =
+      make_uniq<ZipFileHandle>(*this, path, flags, std::move(handle));
+
+  mz_zip_zero_struct(&zip_file_handle->zip);
+  zip_file_handle->zip.m_pRead = &FileSystemZipReadFunc;
+  zip_file_handle->zip.m_pIO_opaque = zip_file_handle->inner_handle.get();
   try {
     mz_uint zip_flags = 0;
 
-    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
+    if (!mz_zip_reader_init(&zip_file_handle->zip, size, zip_flags)) {
       throw IOException("Could not open as zip file: %s",
-                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+                        mz_zip_get_error_string(
+                            mz_zip_get_last_error(&zip_file_handle->zip)));
     }
+    zip_file_handle->zip_inited = true;
 
     mz_uint file_index = 0;
     auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
-                                     nullptr, 0, &file_index) == MZ_FALSE;
+        mz_zip_reader_locate_file_v2(&zip_file_handle->zip,
+                                     normalized_file_path.c_str(), nullptr, 0,
+                                     &file_index) == MZ_FALSE;
     if (locate_failed) {
       throw IOException("Failed to find file: %s", normalized_file_path);
     }
 
     mz_zip_archive_file_stat file_stat = {0};
     auto stat_failed =
-        mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
+        mz_zip_reader_file_stat(&zip_file_handle->zip, file_index,
+                                &file_stat) == MZ_FALSE;
 
     if (stat_failed) {
       throw IOException("Problem stat-ing file within archive: %s",
-                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+                        mz_zip_get_error_string(
+                            mz_zip_get_last_error(&zip_file_handle->zip)));
     }
     if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
       throw IOException("Unknown compression method");
     }
 
-    auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
-    mz_zip_reader_extract_file_to_mem(
-        &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
+    zip_file_handle->file_index = file_index;
+    zip_file_handle->file_stat = file_stat;
 
-    auto zip_file_handle = make_uniq<ZipFileHandle>(
-        *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
-
-    mz_zip_reader_end(&zip);
-
-    return zip_file_handle;
+    return std::move(zip_file_handle);
   } catch (Exception &ex) {
-    mz_zip_reader_end(&zip);
+    if (zip_file_handle->zip_inited) {
+      mz_zip_reader_end(&zip_file_handle->zip);
+      zip_file_handle->zip_inited = false;
+    }
     throw;
   }
 }
 
 void ZipFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
                          idx_t location) {
-  auto &t_handle = handle.Cast<ZipFileHandle>();
-  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - location;
-  auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-  memcpy(buffer, t_handle.data.get() + location, to_read);
+  handle.Cast<ZipFileHandle>().ReadBytesAt(buffer, nr_bytes, location);
 }
 
 int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
                             int64_t nr_bytes) {
-  auto &t_handle = handle.Cast<ZipFileHandle>();
-  auto position = t_handle.seek_offset;
-  auto remaining_bytes = t_handle.file_stat.m_uncomp_size - position;
-  auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-  memcpy(buffer, t_handle.data.get() + position, to_read);
-  t_handle.seek_offset += to_read;
-  return to_read;
+  return handle.Cast<ZipFileHandle>().ReadBytes(buffer, nr_bytes);
 }
 
 int64_t ZipFileSystem::GetFileSize(FileHandle &handle) {
-  auto &t_handle = handle.Cast<ZipFileHandle>();
-  return UnsafeNumericCast<int64_t>(t_handle.file_stat.m_uncomp_size);
+  return handle.Cast<ZipFileHandle>().Size();
 }
 
 void ZipFileSystem::Seek(FileHandle &handle, idx_t location) {
-  auto &t_handle = handle.Cast<ZipFileHandle>();
-  t_handle.seek_offset = location;
+  handle.Cast<ZipFileHandle>().seek_offset = location;
 }
 
 void ZipFileSystem::Reset(FileHandle &handle) {
-  auto &t_handle = handle.Cast<ZipFileHandle>();
-  t_handle.seek_offset = 0;
+  handle.Cast<ZipFileHandle>().seek_offset = 0;
 }
 
 idx_t ZipFileSystem::SeekPosition(FileHandle &handle) {
-  auto &t_handle = handle.Cast<ZipFileHandle>();
-  return t_handle.seek_offset;
+  return handle.Cast<ZipFileHandle>().seek_offset;
 }
 
 bool ZipFileSystem::CanSeek() { return true; }
