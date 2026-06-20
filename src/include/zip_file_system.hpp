@@ -32,7 +32,7 @@ public:
       : FileHandle(file_system, path, flags),
         inner_handle(std::move(inner_handle_p)), zip_inited(false),
         file_stat({0}), file_index(0), iter(nullptr), stream_pos(0),
-        seek_offset(0) {
+        seek_offset(0), stream_finished(false) {
     scratch = make_uniq_array2<data_t>(ZIP_BLOCK_SIZE);
   }
 
@@ -48,7 +48,7 @@ public:
 private:
   // (Re)start the miniz extract iterator at the start of the entry.
   void InitStream();
-  void CloseStream();
+  void CloseStream(bool throw_on_error = false);
   int64_t ReadStream(void *buffer, int64_t nr_bytes);
   void SeekTo(idx_t target);
 
@@ -60,6 +60,7 @@ private:
   mz_zip_reader_extract_iter_state *iter; // current streaming iterator
   idx_t stream_pos;                       // decompressed bytes consumed
   idx_t seek_offset;                      // logical cursor for sequential reads
+  bool stream_finished;                   // iterator reached validated EOF
   unique_ptr<data_t[]> scratch;           // discard buffer for forward seeks
   std::mutex stream_lock;
 };

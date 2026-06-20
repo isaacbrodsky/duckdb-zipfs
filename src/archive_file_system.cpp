@@ -140,7 +140,12 @@ int FileSystemZipCloseFunc(struct archive *archive, void *clientData) {
 
 ArchiveFileHandle::~ArchiveFileHandle() { CloseStream(); }
 
-void ArchiveFileHandle::Close() { CloseStream(); }
+void ArchiveFileHandle::Close() {
+  CloseStream();
+  if (lib_handle && lib_handle->inner_handle) {
+    lib_handle->inner_handle->Close();
+  }
+}
 
 void ArchiveFileHandle::CloseStream() {
   if (archive) {
@@ -218,6 +223,11 @@ int64_t ArchiveFileHandle::ReadStream(void *buffer, int64_t nr_bytes) {
       throw IOException("Failed to read: %s", archive_error_string(archive));
     }
     if (read_bytes == 0) {
+      if (sz >= 0 &&
+          stream_pos + UnsafeNumericCast<idx_t>(total) <
+              UnsafeNumericCast<idx_t>(sz)) {
+        throw IOException("Failed to read: unexpected end of archive entry");
+      }
       break; // EOF
     }
     total += read_bytes;
@@ -239,6 +249,9 @@ void ArchiveFileHandle::SeekTo(idx_t target) {
       throw IOException("Failed to read: %s", archive_error_string(archive));
     }
     if (read_bytes == 0) {
+      if (sz >= 0 && stream_pos < UnsafeNumericCast<idx_t>(sz)) {
+        throw IOException("Failed to read: unexpected end of archive entry");
+      }
       break; // EOF before reaching target
     }
     stream_pos += UnsafeNumericCast<idx_t>(read_bytes);
@@ -257,7 +270,13 @@ void ArchiveFileHandle::ReadBytesAt(void *buffer, int64_t nr_bytes,
                                     idx_t location) {
   std::lock_guard<std::mutex> lock(stream_lock);
   SeekTo(location);
-  ReadStream(buffer, nr_bytes);
+  auto n = ReadStream(buffer, nr_bytes);
+  if (n != nr_bytes) {
+    throw IOException(
+        "Could not read enough bytes from archive entry \"%s\": attempted to "
+        "read %lld bytes from location %llu",
+        entry_name, nr_bytes, location);
+  }
 }
 
 int64_t ArchiveFileHandle::Size() {

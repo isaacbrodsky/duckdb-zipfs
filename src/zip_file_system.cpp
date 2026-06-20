@@ -106,10 +106,14 @@ void ZipFileHandle::Close() {
   }
 }
 
-void ZipFileHandle::CloseStream() {
+void ZipFileHandle::CloseStream(bool throw_on_error) {
   if (iter) {
-    mz_zip_reader_extract_iter_free(iter);
+    auto ok = mz_zip_reader_extract_iter_free(iter);
     iter = nullptr;
+    if (!ok && throw_on_error) {
+      throw IOException("Failed to finish streaming zip entry: %s",
+                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+    }
   }
 }
 
@@ -121,9 +125,13 @@ void ZipFileHandle::InitStream() {
                       mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
   }
   stream_pos = 0;
+  stream_finished = false;
 }
 
 int64_t ZipFileHandle::ReadStream(void *buffer, int64_t nr_bytes) {
+  if (stream_finished && stream_pos >= file_stat.m_uncomp_size) {
+    return 0;
+  }
   if (!iter) {
     InitStream();
   }
@@ -133,17 +141,27 @@ int64_t ZipFileHandle::ReadStream(void *buffer, int64_t nr_bytes) {
     size_t got = mz_zip_reader_extract_iter_read(
         iter, out + total, UnsafeNumericCast<size_t>(nr_bytes - total));
     if (got == 0) {
+      if (stream_pos + UnsafeNumericCast<idx_t>(total) <
+          file_stat.m_uncomp_size) {
+        throw IOException("Failed to read zip entry: %s",
+                          mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+      }
       break; // EOF
     }
     total += UnsafeNumericCast<int64_t>(got);
   }
   stream_pos += UnsafeNumericCast<idx_t>(total);
+  if (iter && stream_pos == file_stat.m_uncomp_size) {
+    CloseStream(/*throw_on_error=*/true);
+    stream_finished = true;
+  }
   return total;
 }
 
 void ZipFileHandle::SeekTo(idx_t target) {
   // A backwards seek (or no open iterator) requires re-inflating from start.
-  if (!iter || target < stream_pos) {
+  if (target < stream_pos ||
+      (!iter && !(stream_finished && target == stream_pos))) {
     InitStream();
   }
   while (stream_pos < target) {
@@ -151,9 +169,18 @@ void ZipFileHandle::SeekTo(idx_t target) {
                                 target - stream_pos);
     size_t got = mz_zip_reader_extract_iter_read(iter, scratch.get(), want);
     if (got == 0) {
+      if (stream_pos < file_stat.m_uncomp_size) {
+        throw IOException("Failed to read zip entry: %s",
+                          mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+      }
       break; // EOF before reaching target
     }
     stream_pos += UnsafeNumericCast<idx_t>(got);
+    if (iter && stream_pos == file_stat.m_uncomp_size) {
+      CloseStream(/*throw_on_error=*/true);
+      stream_finished = true;
+      break;
+    }
   }
 }
 
@@ -169,7 +196,13 @@ void ZipFileHandle::ReadBytesAt(void *buffer, int64_t nr_bytes,
                                 idx_t location) {
   std::lock_guard<std::mutex> lock(stream_lock);
   SeekTo(location);
-  ReadStream(buffer, nr_bytes);
+  auto n = ReadStream(buffer, nr_bytes);
+  if (n != nr_bytes) {
+    throw IOException(
+        "Could not read enough bytes from zip entry \"%s\": attempted to "
+        "read %lld bytes from location %llu",
+        file_stat.m_filename, nr_bytes, location);
+  }
 }
 
 //------------------------------------------------------------------------------
