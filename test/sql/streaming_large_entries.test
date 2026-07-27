@@ -1,0 +1,95 @@
+# name: test/sql/streaming_large_entries.test
+# description: exercise the streaming read paths (multi-block, forward-discard
+#              and backward restart seeks) added when entries stopped being
+#              buffered fully into memory.
+# group: [sql]
+
+require zipfs
+
+require parquet
+
+require notwindows
+
+# ------------------------------------------------------------------------------
+# Parquet inside a zip. Parquet reads the footer at the END of the entry and
+# then seeks BACKWARDS to the row groups, so this exercises the backward-restart
+# decompression path that a sequential CSV read never hits.
+# ------------------------------------------------------------------------------
+
+query II
+SELECT count(*), sum(id) FROM 'zip://examples/data.zip/numbers.parquet';
+----
+10000	49995000
+
+# Point lookup near the very end forces reading row groups after a backward seek.
+query I
+SELECT name FROM 'zip://examples/data.zip/numbers.parquet' WHERE id = 9999;
+----
+row_9999
+
+query I
+SELECT name FROM 'zip://examples/data.zip/numbers.parquet' WHERE id = 0;
+----
+row_0
+
+# Re-open the same archive twice in one query (self join) to confirm a fresh
+# stream is started each time rather than reusing exhausted state.
+query I
+SELECT count(*)
+FROM 'zip://examples/data.zip/numbers.parquet' a
+JOIN 'zip://examples/data.zip/numbers.parquet' b USING (id)
+WHERE a.id < 100;
+----
+100
+
+# ------------------------------------------------------------------------------
+# Large CSV inside a zip (uncompressed ~190 KB, far larger than ZIP_BLOCK_SIZE),
+# so the streaming read loop spans many blocks. read_csv is a forward sequential
+# reader: O(n) time, bounded memory.
+# ------------------------------------------------------------------------------
+
+query II
+SELECT count(*), sum(dbl) FROM 'zip://examples/data.zip/numbers.csv';
+----
+10000	99990000
+
+query I
+SELECT name FROM 'zip://examples/data.zip/numbers.csv' WHERE id = 5000;
+----
+row_5000
+
+# ------------------------------------------------------------------------------
+# Same large parquet inside a tar.gz, read through archive:// (libarchive).
+# ------------------------------------------------------------------------------
+
+statement ok
+SET zipfs_split = "!!";
+
+query II
+SELECT count(*), sum(id) FROM 'archive://examples/data.tar.gz!!numbers.parquet';
+----
+10000	49995000
+
+query I
+SELECT name FROM 'archive://examples/data.tar.gz!!numbers.csv' WHERE id = 9999;
+----
+row_9999
+
+# ------------------------------------------------------------------------------
+# Raw gzip (compressed://) does NOT record the uncompressed size, so GetFileSize
+# triggers a one-time streaming discard pass. Reading it then re-opens the
+# stream. Both must agree and stay bounded in memory.
+# ------------------------------------------------------------------------------
+
+query II
+SELECT count(*), sum(dbl)
+FROM read_csv('compressed://examples/numbers.csv.gz', compression = 'uncompressed');
+----
+10000	99990000
+
+query I
+SELECT name
+FROM read_csv('compressed://examples/numbers.csv.gz', compression = 'uncompressed')
+WHERE id = 1234;
+----
+row_1234
