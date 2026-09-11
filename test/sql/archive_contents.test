@@ -4,8 +4,6 @@
 
 require zipfs
 
-require notwindows
-
 query III
 SELECT * FROM archive_contents('examples/a.zip');
 ----
