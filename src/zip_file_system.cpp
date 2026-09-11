@@ -115,6 +115,33 @@ size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
   return UnsafeNumericCast<size_t>(handle->Read(pBuf, n));
 }
 
+// Offset of a stored member's data: read the 30-byte local header at
+// m_local_header_ofs to skip its name/extra fields (which the central directory
+// does not resolve), returning false if the header or data run past EOF.
+static bool StoredMemberDataOffset(FileHandle &inner,
+                                   const mz_zip_archive_file_stat &stat,
+                                   idx_t file_size, idx_t *out_offset) {
+  idx_t header_ofs = UnsafeNumericCast<idx_t>(stat.m_local_header_ofs);
+  if (file_size < 30 || header_ofs > file_size - 30) {
+    return false;
+  }
+  data_t lh[30];
+  inner.Read(lh, sizeof(lh), header_ofs);
+  // Local file header signature "PK\3\4".
+  if (lh[0] != 0x50 || lh[1] != 0x4b || lh[2] != 0x03 || lh[3] != 0x04) {
+    return false;
+  }
+  uint16_t name_len = UnsafeNumericCast<uint16_t>(lh[26] | (lh[27] << 8));
+  uint16_t extra_len = UnsafeNumericCast<uint16_t>(lh[28] | (lh[29] << 8));
+  idx_t data_off = header_ofs + 30 + name_len + extra_len;
+  if (data_off > file_size ||
+      UnsafeNumericCast<idx_t>(stat.m_uncomp_size) > file_size - data_off) {
+    return false;
+  }
+  *out_offset = data_off;
+  return true;
+}
+
 unique_ptr<FileHandle>
 ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
                         optional_ptr<FileOpener> opener) {
@@ -181,11 +208,21 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       throw IOException("Unknown compression method");
     }
 
+    // Serve stored members through a windowed handle to keep DuckDB's ranged
+    // reads; compressed members fall through to the buffered path below.
+    idx_t data_offset;
+    if (file_stat.m_method == 0 && !file_stat.m_is_encrypted &&
+        StoredMemberDataOffset(*handle, file_stat, size, &data_offset)) {
+      mz_zip_reader_end(&zip);
+      return make_uniq<WindowedZipFileHandle>(
+          *this, path, flags, std::move(handle), file_stat, data_offset);
+    }
+
     auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
     mz_zip_reader_extract_file_to_mem(
         &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
 
-    auto zip_file_handle = make_uniq<ZipFileHandle>(
+    auto zip_file_handle = make_uniq<BufferedZipFileHandle>(
         *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
 
     mz_zip_reader_end(&zip);
@@ -202,7 +239,7 @@ void ZipFileSystem::Read(FileHandle &handle, void *buffer, int64_t nr_bytes,
   auto &t_handle = handle.Cast<ZipFileHandle>();
   auto remaining_bytes = t_handle.file_stat.m_uncomp_size - location;
   auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-  memcpy(buffer, t_handle.data.get() + location, to_read);
+  t_handle.ReadInto(buffer, to_read, location);
 }
 
 int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
@@ -211,7 +248,7 @@ int64_t ZipFileSystem::Read(FileHandle &handle, void *buffer,
   auto position = t_handle.seek_offset;
   auto remaining_bytes = t_handle.file_stat.m_uncomp_size - position;
   auto to_read = MinValue(UnsafeNumericCast<idx_t>(nr_bytes), remaining_bytes);
-  memcpy(buffer, t_handle.data.get() + position, to_read);
+  t_handle.ReadInto(buffer, to_read, position);
   t_handle.seek_offset += to_read;
   return to_read;
 }
