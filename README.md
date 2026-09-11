@@ -62,7 +62,7 @@ SET zipfs_split = "!!";
 SELECT * FROM 'zip://examples/a.zip!!b.csv';
 ```
 
-Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchive is not available on Windows)
+Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme)
 ```SQL
 SET zipfs_split = "!!";
 
@@ -78,7 +78,6 @@ SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 
 This extension supports both zip files and archive files. The zip file support is using miniz, the archive file
 support uses libarchive. libarchive supports a wider range of compression algorithms and container formats.
-libarchive is not available on Windows and using them there will result in an error.
 
 ## Performance considerations
 
