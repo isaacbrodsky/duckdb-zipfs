@@ -1,7 +1,24 @@
 {
   "dependencies": [
     "miniz",
-    "libarchive"
+    {
+      "name": "libarchive",
+      "default-features": false,
+      "features": [
+        "bzip2",
+        "crypto",
+        "lz4",
+        "lzma",
+        "zstd"
+      ]
+    },
+    {
+      "name": "libarchive",
+      "features": [
+        "xar"
+      ],
+      "platform": "!windows"
+    }
   ],
   "vcpkg-configuration": {
     "overlay-ports": [
