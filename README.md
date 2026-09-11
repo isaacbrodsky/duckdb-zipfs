@@ -78,6 +78,7 @@ SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 
 This extension supports both zip files and archive files. The zip file support is using miniz, the archive file
 support uses libarchive. libarchive supports a wider range of compression algorithms and container formats.
+(Note: xar is not supported on Windows or MinGW.)
 
 ## Performance considerations
 
