@@ -115,17 +115,20 @@ size_t FileSystemZipReadFunc(void *pOpaque, mz_uint64 file_ofs, void *pBuf,
   return UnsafeNumericCast<size_t>(handle->Read(pBuf, n));
 }
 
-// Offset of a stored member's data: read the 30-byte local header at
-// m_local_header_ofs to skip its name/extra fields (which the central directory
-// does not resolve), returning false if the header or data run past EOF.
+static constexpr idx_t ZIP_LOCAL_HEADER_SIZE = 30;
+
+// Offset of a stored member's data: read the local header at m_local_header_ofs
+// to skip its name/extra fields (which the central directory does not resolve),
+// returning false if the header or data run past EOF.
 static bool StoredMemberDataOffset(FileHandle &inner,
                                    const mz_zip_archive_file_stat &stat,
                                    idx_t file_size, idx_t *out_offset) {
   idx_t header_ofs = UnsafeNumericCast<idx_t>(stat.m_local_header_ofs);
-  if (file_size < 30 || header_ofs > file_size - 30) {
+  if (file_size < ZIP_LOCAL_HEADER_SIZE ||
+      header_ofs > file_size - ZIP_LOCAL_HEADER_SIZE) {
     return false;
   }
-  data_t lh[30];
+  data_t lh[ZIP_LOCAL_HEADER_SIZE];
   inner.Read(lh, sizeof(lh), header_ofs);
   // Local file header signature "PK\3\4".
   if (lh[0] != 0x50 || lh[1] != 0x4b || lh[2] != 0x03 || lh[3] != 0x04) {
@@ -133,7 +136,7 @@ static bool StoredMemberDataOffset(FileHandle &inner,
   }
   uint16_t name_len = UnsafeNumericCast<uint16_t>(lh[26] | (lh[27] << 8));
   uint16_t extra_len = UnsafeNumericCast<uint16_t>(lh[28] | (lh[29] << 8));
-  idx_t data_off = header_ofs + 30 + name_len + extra_len;
+  idx_t data_off = header_ofs + ZIP_LOCAL_HEADER_SIZE + name_len + extra_len;
   if (data_off > file_size ||
       UnsafeNumericCast<idx_t>(stat.m_uncomp_size) > file_size - data_off) {
     return false;

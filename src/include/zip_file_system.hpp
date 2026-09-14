@@ -53,7 +53,8 @@ private:
   unique_ptr<data_t[]> data;
 };
 
-// A stored (uncompressed) member forwarding reads to the underlying handle at data_offset.
+// A stored (uncompressed) member forwarding reads to the underlying handle at
+// data_offset.
 class WindowedZipFileHandle final : public ZipFileHandle {
 public:
   WindowedZipFileHandle(FileSystem &file_system, const string &path,
