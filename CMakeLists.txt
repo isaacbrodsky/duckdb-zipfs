@@ -1,11 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 
-include(CMakeDependentOption)
-
 # Set extension name here
 set(TARGET_NAME zipfs)
 
-cmake_dependent_option(ENABLE_LIBARCHIVE "Enable libarchive support for additional archive formats" ON "NOT WIN32" OFF)
+option(ENABLE_LIBARCHIVE "Enable libarchive support for additional archive formats" ON)
 
 find_package(miniz REQUIRED)
 if (ENABLE_LIBARCHIVE)
