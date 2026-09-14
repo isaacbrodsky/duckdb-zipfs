@@ -60,9 +60,9 @@ unique_ptr<BaseSecret> CreateZipSecretFunction(ClientContext &context,
 }
 
 #ifdef ENABLE_LIBARCHIVE
-void RegisterPassphrasesToArchive(ClientContext &context,
-                                  const string &archivePath,
-                                  struct archive *archive) {
+vector<string> LookupArchivePassphrases(ClientContext &context,
+                                       const string &archivePath) {
+  vector<string> passphrases;
   auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
   auto match =
       SecretManager::Get(context).LookupSecret(transaction, archivePath, "zip");
@@ -70,25 +70,29 @@ void RegisterPassphrasesToArchive(ClientContext &context,
     if (auto kv = dynamic_cast<const KeyValueSecret *>(&match.GetSecret())) {
       Value value;
       if (kv->TryGetValue("password", value) && !value.IsNull()) {
-        if (archive_read_add_passphrase(archive,
-                                        value.GetValue<string>().c_str())) {
-          throw IOException("Failed to register archive passphrase: %s",
-                            archive_error_string(archive));
-        }
+        passphrases.push_back(value.GetValue<string>());
       }
 
       Value listValue;
       if (kv->TryGetValue("passwords", listValue) && !listValue.IsNull()) {
         for (const auto &child : ListValue::GetChildren(listValue)) {
           if (!child.IsNull()) {
-            if (archive_read_add_passphrase(archive,
-                                            child.GetValue<string>().c_str())) {
-              throw IOException("Failed to register archive passphrase: %s",
-                                archive_error_string(archive));
-            }
+            passphrases.push_back(child.GetValue<string>());
           }
         }
       }
+    }
+  }
+  return passphrases;
+}
+
+void RegisterPassphrasesToArchive(ClientContext &context,
+                                  const string &archivePath,
+                                  struct archive *archive) {
+  for (const auto &passphrase : LookupArchivePassphrases(context, archivePath)) {
+    if (archive_read_add_passphrase(archive, passphrase.c_str())) {
+      throw IOException("Failed to register archive passphrase: %s",
+                        archive_error_string(archive));
     }
   }
 }
