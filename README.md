@@ -1,5 +1,5 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.4&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.4)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.5&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.5)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
@@ -86,7 +86,10 @@ This extension is intended more for convience than high performance. It does not
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
 
-The selected file will be read entirely into memory, not streamed. Therefore it cannot be used to read files which are larger than memory when uncompressed.
+How a member is read depends on how it was stored:
+
+- **Compressed** members (DEFLATE) are decompressed entirely into memory, so they cannot be larger than memory when uncompressed.
+- **Stored** members (uncompressed, `zip -0`) are read directly from their byte range, so a query fetches only what it needs (e.g. a Parquet footer plus the required row groups) — over remote backends (`s3://`, `az://`) as small HTTP range requests rather than a full download.
 
 # Development
 
