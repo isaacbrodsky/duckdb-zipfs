@@ -75,3 +75,16 @@ Archive:  csv_gz.zip
 ---------                     -------
        87                     2 files
 ```
+
+`data.zip`, `data.tar.gz` and `numbers.csv.gz` hold larger entries (10,000 rows
+of `id, dbl, name`) used to exercise the streaming read paths: multi-block reads,
+forward-discard seeks and the backward-restart seeks that Parquet triggers. They
+are generated with:
+
+```
+$ duckdb -c "COPY (SELECT i AS id, i*2 AS dbl, ('row_' || i) AS name FROM range(10000) t(i)) TO 'numbers.parquet' (FORMAT parquet);"
+$ duckdb -c "COPY (SELECT i AS id, i*2 AS dbl, ('row_' || i) AS name FROM range(10000) t(i)) TO 'numbers.csv' (FORMAT csv, HEADER);"
+$ zip -j data.zip numbers.parquet numbers.csv
+$ tar czf data.tar.gz numbers.parquet numbers.csv
+$ gzip -n numbers.csv     # -> numbers.csv.gz
+```

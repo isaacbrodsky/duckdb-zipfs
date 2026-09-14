@@ -86,7 +86,19 @@ This extension is intended more for convience than high performance. It does not
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
 
-The selected file will be read entirely into memory, not streamed. Therefore it cannot be used to read files which are larger than memory when uncompressed.
+The selected file is **streamed**, not read entirely into memory. The decompression stream is kept open and read incrementally, so files
+that are larger than memory when uncompressed can be read. Memory use per open file is bounded (a small fixed buffer) regardless of the
+uncompressed size, so e.g. a 100 GB CSV inside a zip can be read on a machine with far less RAM.
+
+This works best for sequential readers (`read_csv`, `read_json`/NDJSON), which read forward in a single pass — these are `O(n)` time with
+bounded memory. Random access is still supported: forward seeks decompress-and-discard, while backward seeks restart the decompression
+stream from the start of the entry. Formats that seek heavily (e.g. Parquet) therefore work but can be slow inside an archive. Because each
+open file keeps a single decompression stream, reads on one handle are serialized and out-of-order/backward access re-decompresses from the
+start, so reading an archived file is effectively single-threaded — extract large Parquet to plain storage first if you need parallel scans.
+
+For archive entries that do not record their uncompressed size (raw `compressed://` gzip/bz2), the size is determined by a one-time
+streaming pass that discards the data, which keeps memory bounded but decompresses the data twice (once to size, once to read). Entries in
+`zip://` and `archive://` (tar etc.) record the size in the directory/header, so they are read in a single pass.
 
 # Development
 
