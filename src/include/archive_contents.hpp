@@ -2,6 +2,7 @@
 
 #ifdef ENABLE_LIBARCHIVE
 
+#include "duckdb.hpp"
 #include <archive.h>
 #include <archive_entry.h>
 #include "utils.hpp"
@@ -14,7 +15,7 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
 unique_ptr<FunctionData>
 ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
                         vector<LogicalType> &return_types,
-                        vector<string> &names);
+                        vector<Identifier> &names);
 
 unique_ptr<GlobalTableFunctionState>
 ReadArchiveFunctionInit(ClientContext &context, TableFunctionInitInput &input);

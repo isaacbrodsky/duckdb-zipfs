@@ -106,7 +106,7 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
 unique_ptr<FunctionData>
 ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
                         vector<LogicalType> &return_types,
-                        vector<string> &names) {
+                        vector<Identifier> &names) {
   auto result = make_uniq<ReadArchiveFunctionBindData>();
   result->file_path = input.inputs[0].GetValue<string>();
 

@@ -2,6 +2,7 @@
 
 #ifndef ENABLE_LIBARCHIVE
 
+#include "duckdb.hpp"
 #include "utils.hpp"
 
 namespace duckdb {
@@ -11,7 +12,7 @@ void NoopReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
 
 unique_ptr<FunctionData> NoopReadArchiveFunctionBind(
     ClientContext &context, TableFunctionBindInput &input,
-    vector<LogicalType> &return_types, vector<string> &names);
+    vector<LogicalType> &return_types, vector<Identifier> &names);
 
 unique_ptr<GlobalTableFunctionState>
 NoopReadArchiveFunctionInit(ClientContext &context,
