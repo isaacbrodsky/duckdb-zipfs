@@ -139,10 +139,9 @@ void StreamingZipFileHandle::ReadInto(void *buffer, idx_t nr_bytes,
   // would require re-inflating from the start, which we deliberately do not do.
   if (!iter || location < stream_pos) {
     if (location < stream_pos) {
-      throw IOException(
-          "Cannot seek backwards in compressed zip entry \"%s\" "
-          "(requested %llu, at %llu)",
-          file_stat.m_filename, location, stream_pos);
+      throw IOException("Cannot seek backwards in compressed zip entry \"%s\" "
+                        "(requested %llu, at %llu)",
+                        file_stat.m_filename, location, stream_pos);
     }
     InitStream();
   }

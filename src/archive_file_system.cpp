@@ -157,7 +157,8 @@ void ArchiveFileHandle::CloseStream() {
 void ArchiveFileHandle::InitStream() {
   CloseStream();
 
-  // Rewind the underlying compressed file so libarchive re-reads from the start.
+  // Rewind the underlying compressed file so libarchive re-reads from the
+  // start.
   lib_handle->inner_handle->Seek(0);
 
   archive = archive_read_new();
@@ -223,9 +224,8 @@ int64_t ArchiveFileHandle::ReadStream(void *buffer, int64_t nr_bytes) {
       throw IOException("Failed to read: %s", archive_error_string(archive));
     }
     if (read_bytes == 0) {
-      if (sz >= 0 &&
-          stream_pos + UnsafeNumericCast<idx_t>(total) <
-              UnsafeNumericCast<idx_t>(sz)) {
+      if (sz >= 0 && stream_pos + UnsafeNumericCast<idx_t>(total) <
+                         UnsafeNumericCast<idx_t>(sz)) {
         throw IOException("Failed to read: unexpected end of archive entry");
       }
       break; // EOF
@@ -291,7 +291,8 @@ int64_t ArchiveFileHandle::Size() {
       while (true) {
         auto read_bytes = archive_read_data(archive, scratch.get(), BLOCK_SIZE);
         if (read_bytes < 0) {
-          throw IOException("Failed to read: %s", archive_error_string(archive));
+          throw IOException("Failed to read: %s",
+                            archive_error_string(archive));
         }
         if (read_bytes == 0) {
           break;

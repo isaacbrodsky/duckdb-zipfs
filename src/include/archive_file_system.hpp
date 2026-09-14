@@ -96,8 +96,9 @@ private:
   FileType file_type;
   bool on_disk_file;
 
-  // lib_handle owns the inner file handle and the compressed-input block buffer;
-  // it must outlive `archive` (which references it via the read callbacks).
+  // lib_handle owns the inner file handle and the compressed-input block
+  // buffer; it must outlive `archive` (which references it via the read
+  // callbacks).
   unique_ptr<LibArchiveHandle> lib_handle;
   bool raw_format;   // true => archive_read_support_format_raw (compressed://)
   string entry_name; // entry to extract; ignored when raw_format
@@ -107,7 +108,7 @@ private:
   // logical cursor for sequential reads; atomic because the FileSystem
   // Seek/Reset/SeekPosition entry points touch it without holding stream_lock.
   std::atomic<idx_t> seek_offset;
-  int64_t sz;              // uncompressed size, or -1 if not yet known
+  int64_t sz;                   // uncompressed size, or -1 if not yet known
   unique_ptr<data_t[]> scratch; // discard buffer for forward seeks / size probe
   std::mutex stream_lock;
 };

@@ -10,10 +10,10 @@ namespace duckdb {
 void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
                      DataChunk &output);
 
-unique_ptr<FunctionData>
-ReadZipFunctionBind(ClientContext &context, TableFunctionBindInput &input,
-                    vector<LogicalType> &return_types,
-                    vector<Identifier> &names);
+unique_ptr<FunctionData> ReadZipFunctionBind(ClientContext &context,
+                                             TableFunctionBindInput &input,
+                                             vector<LogicalType> &return_types,
+                                             vector<Identifier> &names);
 
 unique_ptr<GlobalTableFunctionState>
 ReadZipFunctionInit(ClientContext &context, TableFunctionInitInput &input);
