@@ -1,11 +1,12 @@
 # name: test/sql/streaming_large_entries.test
 # description: exercise the streaming read paths added when compressed entries
+# group: [sql]
+
 #              stopped being buffered fully into memory. DEFLATE (zip) and all
 #              archive:// / compressed:// entries are streamed forward-only
 #              (CanSeek() == false), so sequential readers (read_csv) succeed
 #              with bounded memory, while readers that seek backwards (parquet,
 #              whose metadata is at the end of the file) are rejected.
-# group: [sql]
 
 require zipfs
 

@@ -66,7 +66,7 @@ private:
   void InitStream();
   void CloseStream();
 
-  mz_zip_archive *zip;  // central-directory reader, owned by the handle
+  mz_zip_archive *zip; // central-directory reader, owned by the handle
   mz_uint file_index;
   mz_zip_reader_extract_iter_state *iter; // current streaming iterator
   idx_t stream_pos;                       // decompressed bytes consumed
