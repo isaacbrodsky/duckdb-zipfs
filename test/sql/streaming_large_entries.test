@@ -1,0 +1,92 @@
+# name: test/sql/streaming_large_entries.test
+# description: exercise the streaming read paths added when compressed entries
+#              stopped being buffered fully into memory. DEFLATE (zip) and all
+#              archive:// / compressed:// entries are streamed forward-only
+#              (CanSeek() == false), so sequential readers (read_csv) succeed
+#              with bounded memory, while readers that seek backwards (parquet,
+#              whose metadata is at the end of the file) are rejected.
+# group: [sql]
+
+require zipfs
+
+require parquet
+
+require notwindows
+
+# ------------------------------------------------------------------------------
+# Parquet inside a zip. numbers.parquet is DEFLATE-compressed, so it is streamed
+# non-seekably. Parquet reads the footer at the END of the file, which needs a
+# backward seek — DuckDB rejects this on a non-seekable (FIFO) handle. To read
+# parquet from a zip, store it uncompressed (`zip -0`) so it is windowed and
+# fully seekable.
+# ------------------------------------------------------------------------------
+
+statement error
+SELECT count(*), sum(id) FROM 'zip://examples/data.zip/numbers.parquet';
+----
+FIFO stream is not supported
+
+# ------------------------------------------------------------------------------
+# Large CSV inside a zip (uncompressed ~190 KB, far larger than ZIP_BLOCK_SIZE),
+# so the streaming read loop spans many blocks. read_csv is a forward sequential
+# reader: O(n) time, bounded memory. This is the case the streaming design
+# targets.
+# ------------------------------------------------------------------------------
+
+query II
+SELECT count(*), sum(dbl) FROM 'zip://examples/data.zip/numbers.csv';
+----
+10000	99990000
+
+query I
+SELECT name FROM 'zip://examples/data.zip/numbers.csv' WHERE id = 5000;
+----
+row_5000
+
+# Re-open the same entry twice in one query (self join) to confirm a fresh
+# stream is started each time rather than reusing exhausted state.
+query I
+SELECT count(*)
+FROM 'zip://examples/data.zip/numbers.csv' a
+JOIN 'zip://examples/data.zip/numbers.csv' b USING (id)
+WHERE a.id < 100;
+----
+100
+
+# ------------------------------------------------------------------------------
+# Same entries inside a tar.gz, read through archive:// (libarchive). archive://
+# is always streamed non-seekably, so CSV (forward) works and parquet is
+# rejected, just like DEFLATE in a zip.
+# ------------------------------------------------------------------------------
+
+statement ok
+SET zipfs_split = "!!";
+
+statement error
+SELECT count(*), sum(id) FROM 'archive://examples/data.tar.gz!!numbers.parquet';
+----
+FIFO stream is not supported
+
+query I
+SELECT name FROM 'archive://examples/data.tar.gz!!numbers.csv' WHERE id = 9999;
+----
+row_9999
+
+# ------------------------------------------------------------------------------
+# Raw gzip (compressed://) does NOT record the uncompressed size, so GetFileSize
+# triggers a one-time streaming discard pass. Reading it then re-opens the
+# stream. Both must agree and stay bounded in memory. Forward reads only.
+# ------------------------------------------------------------------------------
+
+query II
+SELECT count(*), sum(dbl)
+FROM read_csv('compressed://examples/numbers.csv.gz', compression = 'uncompressed');
+----
+10000	99990000
+
+query I
+SELECT name
+FROM read_csv('compressed://examples/numbers.csv.gz', compression = 'uncompressed')
+WHERE id = 1234;
+----
+row_1234
