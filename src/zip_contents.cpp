@@ -125,7 +125,7 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
 unique_ptr<FunctionData> ReadZipFunctionBind(ClientContext &context,
                                              TableFunctionBindInput &input,
                                              vector<LogicalType> &return_types,
-                                             vector<string> &names) {
+                                             vector<Identifier> &names) {
   auto result = make_uniq<ReadZipFunctionBindData>();
   result->file_path = input.inputs[0].GetValue<string>();
 

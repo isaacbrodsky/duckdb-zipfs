@@ -1,5 +1,5 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.4&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.4)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.5&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.5)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
@@ -86,7 +86,22 @@ This extension is intended more for convience than high performance. It does not
 extension is based) does. As such, operations which require the central directory (index) of the zip file, such as globbing files, must
 reread the central directory multiple times, once for the glob and once for each file to open.
 
-The selected file will be read entirely into memory, not streamed. Therefore it cannot be used to read files which are larger than memory when uncompressed.
+How a member is read depends on how it was stored:
+
+- **Compressed** members (DEFLATE) are **streamed**, not read entirely into memory. The decompression stream is kept open and read
+  incrementally, so an entry that is larger than memory when uncompressed can still be read (a small fixed buffer per open file, regardless
+  of uncompressed size). The stream is forward-only: it cannot be seeked randomly, so it works with sequential readers (`read_csv`,
+  `read_json`/NDJSON — `O(n)` time, bounded memory) but not with formats that seek backwards. In particular **Parquet reads its footer at
+  the end of the file**, so reading a DEFLATE-compressed `.parquet` from an archive is rejected with a "FIFO stream is not supported" error —
+  store it uncompressed (see below) or extract it to plain storage first.
+- **Stored** members (uncompressed, `zip -0`) are read directly from their byte range and are fully seekable, so a query fetches only what it
+  needs (e.g. a Parquet footer plus the required row groups) — over remote backends (`s3://`, `az://`) as small HTTP range requests rather
+  than a full download.
+
+`archive://` (tar etc. via libarchive) and raw `compressed://` (gzip/bz2) entries are always streamed forward-only, the same as DEFLATE zip
+members. For raw `compressed://` entries the uncompressed size is not recorded in a header, so it is determined by a one-time streaming pass
+that discards the data — memory stays bounded but the data is decompressed twice (once to size, once to read); `zip://` and `archive://`
+record the size in their directory/header and are read in a single pass.
 
 # Development
 
