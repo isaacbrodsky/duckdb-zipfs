@@ -18,7 +18,7 @@ struct ReadZipFunctionData : public GlobalTableFunctionState {
       throw IOException("Zip file does not exist: %s", zip_path);
     }
 
-    auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
+    handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
     if (!handle) {
       throw IOException("Failed to open file: %s", zip_path);
     }
@@ -28,9 +28,7 @@ struct ReadZipFunctionData : public GlobalTableFunctionState {
     }
 
     idx_t size = handle->GetFileSize();
-    idx_t count = 0;
 
-    mz_zip_archive zip;
     mz_zip_zero_struct(&zip);
     zip.m_pRead = &FileSystemZipReadFunc;
     zip.m_pIO_opaque = handle.get();
@@ -50,7 +48,6 @@ struct ReadZipFunctionData : public GlobalTableFunctionState {
   ReadZipFunctionData &operator=(const ReadZipFunctionData &) = delete;
 
   ~ReadZipFunctionData() override {
-    printf("%d DESTR\n", (int)reader_open);
     if (reader_open) {
       mz_zip_reader_end(&zip);
       reader_open = false;
@@ -78,7 +75,7 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
   zip_filename.reserve(1024);
 
   idx_t count = 0;
-  while (count < STANDARD_VECTOR_SIZE &&
+  while (count < output.GetCapacity() &&
          global_data.entry_idx < global_data.entry_count) {
     mz_uint i = global_data.entry_idx++;
 
@@ -102,17 +99,13 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
       zip_filename.reserve(new_capacity);
     }
     if (filename_size == 0) {
-      printf("AA %d %d %lld\n", i, global_data.entry_count,
-             (uint64_t)global_data.zip.m_pState);
-      throw IOException("Problem getting filename: %s",
+      throw IOException("Problem getting filename (zero): %s",
                         mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
     }
 
     zip_filename.resize(filename_size - 1);
     mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
     if (auto err = mz_zip_get_last_error(&zip)) {
-      printf("%d %d %lld\n", i, global_data.entry_count,
-             (uint64_t)global_data.zip.m_pState);
       throw IOException("Problem getting filename: %s",
                         mz_zip_get_error_string(err));
     }
