@@ -12,7 +12,73 @@
 namespace duckdb {
 
 struct ReadArchiveFunctionData : public GlobalTableFunctionState {
-  ReadArchiveFunctionData() : finished(false) {}
+  ReadArchiveFunctionData(ClientContext &context, const string &archive_path)
+      : archive(nullptr), entry(nullptr), finished(false) {
+    try {
+      auto &fs = FileSystem::GetFileSystem(context);
+      if (!fs.FileExists(archive_path)) {
+        throw IOException("Archive file does not exist: %s", archive_path);
+      }
+
+      auto handle = fs.OpenFile(archive_path, FileOpenFlags::FILE_FLAGS_READ);
+      if (!handle) {
+        throw IOException("Failed to open file: %s", archive_path);
+      }
+
+      if (!handle->CanSeek()) {
+        throw IOException("Cannot seek");
+      }
+
+      file_handle = make_uniq<LibArchiveHandle>(std::move(handle));
+
+      archive = archive_read_new();
+      if (archive_read_support_filter_all(archive)) {
+        throw IOException("Failed to init libarchive (filter all): %s",
+                          archive_error_string(archive));
+      }
+      if (archive_read_support_format_all(archive)) {
+        throw IOException("Failed to init libarchive (format all): %s",
+                          archive_error_string(archive));
+      }
+      // TODO: Add skip?
+      if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
+        throw IOException("Failed to init libarchive (seek callback): %s",
+                          archive_error_string(archive));
+      }
+      if (archive_read_open(archive, file_handle.get(), &FileSystemZipOpenFunc,
+                            &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
+        throw IOException("Failed to init libarchive (read callback): %s",
+                          archive_error_string(archive));
+      }
+      entry = archive_entry_new2(archive);
+      if (!archive) {
+        throw IOException("Failed to allocate archive entry");
+      }
+    } catch (...) {
+      Close();
+      throw;
+    }
+  }
+
+  ReadArchiveFunctionData(const ReadArchiveFunctionData &) = delete;
+  ReadArchiveFunctionData &operator=(const ReadArchiveFunctionData &) = delete;
+
+  ~ReadArchiveFunctionData() override { Close(); }
+
+  void Close() {
+    if (entry) {
+      archive_entry_free(entry);
+      entry = nullptr;
+    }
+    if (archive) {
+      archive_read_free(archive);
+      archive = nullptr;
+    }
+  }
+
+  unique_ptr<LibArchiveHandle> file_handle;
+  struct archive *archive;
+  struct archive_entry *entry;
   bool finished;
 };
 
@@ -22,85 +88,33 @@ struct ReadArchiveFunctionBindData : public TableFunctionData {
 
 void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
                          DataChunk &output) {
-  auto bind_data = data.bind_data->Cast<ReadArchiveFunctionBindData>();
   auto &global_data = data.global_state->Cast<ReadArchiveFunctionData>();
-  if (global_data.finished) {
-    return;
-  }
-  auto &zip_path = bind_data.file_path;
 
-  auto &fs = FileSystem::GetFileSystem(context);
-  if (!fs.FileExists(zip_path)) {
-    throw IOException("Archive file does not exist: %s", zip_path);
-  }
-
-  auto handle = fs.OpenFile(zip_path, FileOpenFlags::FILE_FLAGS_READ);
-  if (!handle) {
-    throw IOException("Failed to open file: %s", zip_path);
-  }
-
-  if (!handle->CanSeek()) {
-    throw IOException("Cannot seek");
-  }
-
-  idx_t size = handle->GetFileSize();
   idx_t count = 0;
+  while (!global_data.finished && count < output.GetCapacity()) {
+    if (archive_read_next_header2(global_data.archive, global_data.entry) !=
+        ARCHIVE_OK) {
+      global_data.finished = true;
+      global_data.Close();
+      break;
+    }
 
-  struct archive *archive = archive_read_new();
-  try {
-    if (archive_read_support_filter_all(archive)) {
-      throw IOException("Failed to init libarchive (filter all): %s",
-                        archive_error_string(archive));
-    }
-    if (archive_read_support_format_all(archive)) {
-      throw IOException("Failed to init libarchive (format all): %s",
-                        archive_error_string(archive));
-    }
-    unique_ptr<LibArchiveHandle> zipHandle =
-        make_uniq<LibArchiveHandle>(std::move(handle));
-    // TODO: Add skip?
-    if (archive_read_set_seek_callback(archive, FileSystemZipSeekFunc)) {
-      throw IOException("Failed to init libarchive (seek callback): %s",
-                        archive_error_string(archive));
-    }
-    if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
-                          &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
-      throw IOException("Failed to init libarchive (read callback): %s",
-                        archive_error_string(archive));
-    }
-    struct archive_entry *entry = archive_entry_new2(archive);
-    try {
-      while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
-        auto pathName = archive_entry_pathname(entry);
-        auto fileSize = archive_entry_size(entry);
-        auto fileType = archive_entry_filetype(entry);
-        auto isDir = fileType == AE_IFDIR;
+    auto entry = global_data.entry;
+    auto pathName = archive_entry_pathname(entry);
+    auto fileSize = archive_entry_size(entry);
+    auto fileType = archive_entry_filetype(entry);
+    auto isDir = fileType == AE_IFDIR;
 
-        idx_t col = 0;
-        output.SetValue(col++, count, Value(pathName));
-        output.SetValue(col++, count,
-                        Value::UBIGINT(NumericCast<uint64_t>(fileSize)));
-        output.SetValue(col++, count, Value::BOOLEAN(isDir));
+    idx_t col = 0;
+    output.SetValue(col++, count, Value(pathName));
+    output.SetValue(col++, count,
+                    Value::UBIGINT(NumericCast<uint64_t>(fileSize)));
+    output.SetValue(col++, count, Value::BOOLEAN(isDir));
 
-        count++;
-      }
-
-      archive_entry_free(entry);
-      archive_read_free(archive);
-    } catch (Exception &ex2) {
-      archive_entry_free(entry);
-      throw;
-    }
-  } catch (IOException &ex) {
-    archive_read_free(archive);
-    throw;
-  } catch (Exception &ex) {
-    archive_read_free(archive);
-    throw;
+    count++;
   }
 
   output.SetCardinality(count);
-  global_data.finished = true;
 }
 
 unique_ptr<FunctionData>
@@ -124,7 +138,8 @@ ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
 
 unique_ptr<GlobalTableFunctionState>
 ReadArchiveFunctionInit(ClientContext &context, TableFunctionInitInput &input) {
-  return std::move(make_uniq<ReadArchiveFunctionData>());
+  auto &bind_data = input.bind_data->Cast<ReadArchiveFunctionBindData>();
+  return make_uniq<ReadArchiveFunctionData>(context, bind_data.file_path);
 }
 
 } // namespace duckdb
