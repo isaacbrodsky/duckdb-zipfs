@@ -75,3 +75,11 @@ Archive:  csv_gz.zip
 ---------                     -------
        87                     2 files
 ```
+
+`examples/big/big.zip` was generated with:
+```py
+import zipfile
+with zipfile.ZipFile('big.zip', 'w') as zf:
+    for i in range(2500):
+        zf.writestr(f'big_dir/{i}.txt', b'hello')
+```
