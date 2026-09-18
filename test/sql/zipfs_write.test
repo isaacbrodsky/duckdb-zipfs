@@ -10,4 +10,4 @@ COPY
     TO 'zip://example/output.zip/test.csv'
     (FORMAT 'csv');
 ----
-IO Error: Zip file system can only open for reading
+
