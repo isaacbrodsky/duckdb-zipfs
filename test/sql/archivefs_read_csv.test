@@ -1,4 +1,4 @@
-# name: test/sql/zipfs_read_csv.test
+# name: test/sql/archivefs_read_csv.test
 # description: test zipfs extension
 # group: [sql]
 
