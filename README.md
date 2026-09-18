@@ -1,6 +1,7 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.4&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.4)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.5&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.5)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/isaacbrodsky/duckdb-zipfs/graph/badge.svg?token=7L9I18PH9V)](https://codecov.io/gh/isaacbrodsky/duckdb-zipfs)
 
 This is a [DuckDB](https://duckdb.org) extension that adds support for reading files from within [zip archives](https://en.wikipedia.org/wiki/ZIP_(file_format)) and other archive formats such as `tar`.
 
@@ -62,7 +63,7 @@ SET zipfs_split = "!!";
 SELECT * FROM 'zip://examples/a.zip!!b.csv';
 ```
 
-Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme, and libarchive is not available on Windows)
+Using `zipfs_split` also means you can read other archives supported by libarchive: (note different URL scheme)
 ```SQL
 SET zipfs_split = "!!";
 
@@ -78,7 +79,7 @@ SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 
 This extension supports both zip files and archive files. The zip file support is using miniz, the archive file
 support uses libarchive. libarchive supports a wider range of compression algorithms and container formats.
-libarchive is not available on Windows and using them there will result in an error.
+(Note: xar is not supported on Windows or MinGW.)
 
 ## Performance considerations
 

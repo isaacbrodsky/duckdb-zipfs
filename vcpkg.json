@@ -3,18 +3,29 @@
     "miniz",
     {
       "name": "libarchive",
+      "default-features": false,
+      "features": [
+        "bzip2",
+        "crypto",
+        "lz4",
+        "lzma",
+        "zstd"
+      ]
+    },
+    {
+      "name": "libarchive",
+      "features": [
+        "xar"
+      ],
       "platform": "!windows"
     }
   ],
   "vcpkg-configuration": {
-    "registries": [
-      {
-        "kind": "git",
-        "repository": "https://github.com/duckdb/vcpkg-duckdb-ports",
-        "baseline": "869bddccca976e0abe25894356e7f49e77765169",
-        "packages": [ "vcpkg-cmake" ]
-      }
+    "overlay-ports": [
+      "./extension-ci-tools/vcpkg_ports"
+    ],
+    "overlay-triplets": [
+      "./extension-ci-tools/toolchains"
     ]
-  },
-  "builtin-baseline" : "ce613c41372b23b1f51333815feb3edd87ef8a8b"
+  }
 }

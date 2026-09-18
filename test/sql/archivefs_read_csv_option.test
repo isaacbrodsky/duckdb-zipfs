@@ -4,8 +4,6 @@
 
 require zipfs
 
-require notwindows
-
 statement ok
 SET zipfs_split = "!!";
 

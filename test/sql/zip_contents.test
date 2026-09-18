@@ -24,3 +24,8 @@ statement error
 select * from zip_contents('examples/a.jsonl.gz');
 ----
 IO Error: Could not open as zip file: failed finding central directory
+
+query I
+select count(*) from zip_contents('examples/big/big.zip');
+----
+2500
