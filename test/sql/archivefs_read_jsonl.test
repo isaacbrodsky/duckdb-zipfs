@@ -21,3 +21,11 @@ select * from read_json('compressed://examples/a.jsonl.bz2', format='newline_del
 ----
 a1
 a2
+
+query I
+select * from read_json('compressed://examples/a.jsonl.*', format='newline_delimited', compression='uncompressed');
+----
+a1
+a2
+a1
+a2
