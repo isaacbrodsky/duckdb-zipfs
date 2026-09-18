@@ -30,3 +30,8 @@ statement error
 select * from archive_contents('examples/a.jsonl.gz');
 ----
 IO Error: Failed to init libarchive (read callback): Unrecognized archive format
+
+query I
+select count(*) from archive_contents('examples/big/big.zip');
+----
+2500
