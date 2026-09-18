@@ -4,11 +4,7 @@
 
 require zipfs
 
-statement ok
-install json;
-
-statement ok
-load json;
+require json
 
 query I
 select * from read_json('compressed://examples/a.jsonl.gz', format='newline_delimited', compression='uncompressed');
