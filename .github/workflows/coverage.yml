@@ -1,0 +1,51 @@
+name: coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    env:
+      GEN: ninja
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Install lcov
+        run: |
+          sudo apt update
+          sudo apt-get install lcov
+
+      - name: Setup vcpkg
+        run: |
+          mkdir local_vcpkg_installation
+          cmake --version
+          cd local_vcpkg_installation
+          git init
+          git remote add origin "https://github.com/microsoft/vcpkg.git"
+          git fetch origin 84bab45d415d22042bd0b9081aea57f362da3f35
+          git checkout 84bab45d415d22042bd0b9081aea57f362da3f35
+          ./bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=${{ github.workspace }}/local_vcpkg_installation" >> $GITHUB_ENV
+          echo "VCPKG_TOOLCHAIN_PATH=${{ github.workspace }}/local_vcpkg_installation/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/local_vcpkg_installation" >> $GITHUB_PATH
+
+      - name: Coverage
+        run: make coverage
+
+      - uses: codecov/codecov-action@v7
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
