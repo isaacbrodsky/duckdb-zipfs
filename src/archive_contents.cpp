@@ -32,6 +32,10 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
       file_handle = make_uniq<LibArchiveHandle>(std::move(handle));
 
       archive = archive_read_new();
+      if (!archive) {
+        throw IOException("Failed to init libarchive (read new): %s",
+                          archive_error_string(archive));
+      }
       if (archive_read_support_filter_all(archive)) {
         throw IOException("Failed to init libarchive (filter all): %s",
                           archive_error_string(archive));
@@ -51,7 +55,7 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
                           archive_error_string(archive));
       }
       entry = archive_entry_new2(archive);
-      if (!archive) {
+      if (!entry) {
         throw IOException("Failed to allocate archive entry");
       }
     } catch (...) {
