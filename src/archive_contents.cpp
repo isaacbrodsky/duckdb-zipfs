@@ -33,8 +33,7 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
 
       archive = archive_read_new();
       if (!archive) {
-        throw IOException("Failed to init libarchive (read new): %s",
-                          archive_error_string(archive));
+        throw IOException("Failed to init libarchive (read new)");
       }
       if (archive_read_support_filter_all(archive)) {
         throw IOException("Failed to init libarchive (filter all): %s",

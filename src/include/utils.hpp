@@ -3,6 +3,7 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/common/vector/flat_vector.hpp"
 
 namespace duckdb {
 
@@ -17,7 +18,7 @@ make_uniq_array2(size_t n) // NOLINT: mimic std style
 }
 
 inline idx_t ChunkSize(const DataChunk &chunk) {
-  return chunk.data[0].Buffer().Capacity();
+  return FlatVector::GetCapacity(chunk.data[0]);
 }
 
 } // namespace duckdb
