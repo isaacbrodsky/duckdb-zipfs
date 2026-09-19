@@ -32,6 +32,9 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
       file_handle = make_uniq<LibArchiveHandle>(std::move(handle));
 
       archive = archive_read_new();
+      if (!archive) {
+        throw IOException("Failed to init libarchive (read new)");
+      }
       if (archive_read_support_filter_all(archive)) {
         throw IOException("Failed to init libarchive (filter all): %s",
                           archive_error_string(archive));
@@ -51,7 +54,7 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
                           archive_error_string(archive));
       }
       entry = archive_entry_new2(archive);
-      if (!archive) {
+      if (!entry) {
         throw IOException("Failed to allocate archive entry");
       }
     } catch (...) {
@@ -91,7 +94,8 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
   auto &global_data = data.global_state->Cast<ReadArchiveFunctionData>();
 
   idx_t count = 0;
-  while (!global_data.finished && count < output.GetCapacity()) {
+  idx_t capacity = ChunkSize(output);
+  while (!global_data.finished && count < capacity) {
     if (archive_read_next_header2(global_data.archive, global_data.entry) !=
         ARCHIVE_OK) {
       global_data.finished = true;
@@ -103,24 +107,25 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
     auto pathName = archive_entry_pathname(entry);
     auto fileSize = archive_entry_size(entry);
     auto fileType = archive_entry_filetype(entry);
+    auto isEncrypted = archive_entry_is_encrypted(entry);
     auto isDir = fileType == AE_IFDIR;
 
     idx_t col = 0;
-    output.SetValue(col++, count, Value(pathName));
-    output.SetValue(col++, count,
-                    Value::UBIGINT(NumericCast<uint64_t>(fileSize)));
-    output.SetValue(col++, count, Value::BOOLEAN(isDir));
+    output.data[col++].Append(pathName);
+    output.data[col++].Append(Value::UBIGINT(NumericCast<uint64_t>(fileSize)));
+    output.data[col++].Append(Value::BOOLEAN(isDir));
+    output.data[col++].Append(Value::BOOLEAN(isEncrypted));
 
     count++;
   }
 
-  output.SetCardinality(count);
+  output.CheckCardinality(count);
 }
 
 unique_ptr<FunctionData>
 ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
                         vector<LogicalType> &return_types,
-                        vector<string> &names) {
+                        vector<Identifier> &names) {
   auto result = make_uniq<ReadArchiveFunctionBindData>();
   result->file_path = input.inputs[0].GetValue<string>();
 
@@ -132,6 +137,9 @@ ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
 
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
+
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
 
   return result;
 }

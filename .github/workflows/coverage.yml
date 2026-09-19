@@ -35,8 +35,8 @@ jobs:
           cd local_vcpkg_installation
           git init
           git remote add origin "https://github.com/microsoft/vcpkg.git"
-          git fetch origin 84bab45d415d22042bd0b9081aea57f362da3f35
-          git checkout 84bab45d415d22042bd0b9081aea57f362da3f35
+          git fetch origin cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
+          git checkout cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
           ./bootstrap-vcpkg.sh
           echo "VCPKG_ROOT=${{ github.workspace }}/local_vcpkg_installation" >> $GITHUB_ENV
           echo "VCPKG_TOOLCHAIN_PATH=${{ github.workspace }}/local_vcpkg_installation/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
