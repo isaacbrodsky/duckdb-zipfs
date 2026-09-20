@@ -95,10 +95,18 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
 
   idx_t count = 0;
   while (!global_data.finished && count < output.GetCapacity()) {
-    if (archive_read_next_header2(global_data.archive, global_data.entry) !=
-        ARCHIVE_OK) {
+    auto err =
+        archive_read_next_header2(global_data.archive, global_data.entry);
+    if (err != ARCHIVE_OK) {
+      std::string errStr =
+          err != ARCHIVE_EOF
+              ? std::string(archive_error_string(global_data.archive))
+              : "(unknown)";
       global_data.finished = true;
       global_data.Close();
+      if (err != ARCHIVE_EOF) {
+        throw IOException("Failed list contents: %s", errStr);
+      }
       break;
     }
 

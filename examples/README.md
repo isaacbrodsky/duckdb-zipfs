@@ -94,3 +94,30 @@ Archive:  passworded.zip
 ---------                     -------
        14                     1 file
 ```
+
+```
+% 7zz l encrypted_header.7z -psecret123
+
+7-Zip (z) 26.03 (arm64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-09-03
+ 64-bit arm_v:8.5-A locale=en_US.UTF-8 Threads:10 OPEN_MAX:4096, ASM
+
+Scanning the drive for archives:
+1 file, 240 bytes (1 KiB)
+
+Listing archive: encrypted_header.7z
+
+--
+Path = encrypted_header.7z
+Type = 7z
+Physical Size = 240
+Headers Size = 224
+Method = LZMA2:12 7zAES
+Solid = -
+Blocks = 1
+
+   Date      Time    Attr         Size   Compressed  Name
+------------------- ----- ------------ ------------  ------------------------
+2026-09-20 14:35:33 ....A           12           16  file_name_secret.csv
+------------------- ----- ------------ ------------  ------------------------
+2026-09-20 14:35:33                 12           16  1 files
+```
