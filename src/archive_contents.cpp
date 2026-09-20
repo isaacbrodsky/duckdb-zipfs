@@ -98,10 +98,8 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
     auto err =
         archive_read_next_header2(global_data.archive, global_data.entry);
     if (err != ARCHIVE_OK) {
-      std::string errStr =
-          err != ARCHIVE_EOF
-              ? std::string(archive_error_string(global_data.archive))
-              : "(unknown)";
+      auto errStrRaw = archive_error_string(global_data.archive);
+      std::string errStr = errStrRaw ? std::string(errStrRaw) : "(unknown)";
       global_data.finished = true;
       global_data.Close();
       if (err != ARCHIVE_EOF) {
