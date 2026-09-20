@@ -107,12 +107,14 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
     auto fileSize = archive_entry_size(entry);
     auto fileType = archive_entry_filetype(entry);
     auto isDir = fileType == AE_IFDIR;
+    auto isEncrypted = archive_entry_is_encrypted(entry);
 
     idx_t col = 0;
     output.SetValue(col++, count, Value(pathName));
     output.SetValue(col++, count,
                     Value::UBIGINT(NumericCast<uint64_t>(fileSize)));
     output.SetValue(col++, count, Value::BOOLEAN(isDir));
+    output.SetValue(col++, count, Value::BOOLEAN(isEncrypted));
 
     count++;
   }
@@ -135,6 +137,9 @@ ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
 
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
+
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
 
   return result;
 }

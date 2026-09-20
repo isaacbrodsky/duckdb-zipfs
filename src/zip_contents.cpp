@@ -123,6 +123,7 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     output.SetValue(col++, count,
                     Value::UBIGINT(NumericCast<uint64_t>(stat.m_uncomp_size)));
     output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_directory));
+    output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_encrypted));
 
     count++;
   }
@@ -145,6 +146,9 @@ unique_ptr<FunctionData> ReadZipFunctionBind(ClientContext &context,
 
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
+
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
 
   return result;
 }
