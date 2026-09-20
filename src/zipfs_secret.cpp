@@ -7,7 +7,7 @@ unique_ptr<BaseSecret> CreateZipSecretFunction(ClientContext &context,
                                                CreateSecretInput &input) {
   auto scope = input.scope;
   if (scope.empty()) {
-    scope = {"zip://", "archive://", "compressed://", ""};
+    scope = {"zip://", "archive://", ""};
   }
   auto secret =
       make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name);
