@@ -3,19 +3,22 @@
 
 namespace duckdb {
 
-static bool CheckInvalidPassword(CreateSecretInput &input) {
+static bool CheckValidPassword(CreateSecretInput &input) {
   auto password = input.options.find("password");
   if (password != input.options.end()) {
     auto value = password->second;
-    if (value.IsNull() || value.GetValue<string>() == "") {
-      throw InvalidInputException("password cannot be empty or NULL");
+    if (value.IsNull()) {
+      throw InvalidInputException("password cannot be NULL");
+    }
+    if (value.GetValue<string>() == "") {
+      throw InvalidInputException("password cannot be empty");
     }
     return true;
   }
   return false;
 }
 
-static bool CheckInvalidPasswords(CreateSecretInput &input) {
+static bool CheckValidPasswords(CreateSecretInput &input) {
   auto passwords = input.options.find("passwords");
   if (passwords != input.options.end()) {
     auto value = passwords->second;
@@ -23,7 +26,7 @@ static bool CheckInvalidPasswords(CreateSecretInput &input) {
       throw InvalidInputException("passwords cannot be NULL");
     }
     auto children = ListValue::GetChildren(value);
-    if (value.IsNull() || children.size() == 0) {
+    if (children.size() == 0) {
       throw InvalidInputException("passwords cannot be empty");
     }
     for (const auto &child : children) {
@@ -44,7 +47,9 @@ unique_ptr<BaseSecret> CreateZipSecretFunction(ClientContext &context,
   }
   auto secret =
       make_uniq<KeyValueSecret>(scope, input.type, input.provider, input.name);
-  if (!CheckInvalidPassword(input) && !CheckInvalidPasswords(input)) {
+  bool validPassword = CheckValidPassword(input);
+  bool validPasswords = CheckValidPasswords(input);
+  if (!validPassword && !validPasswords) {
     throw InvalidInputException("need to set password or passwords list");
   }
   secret->TrySetValue("password", input);
