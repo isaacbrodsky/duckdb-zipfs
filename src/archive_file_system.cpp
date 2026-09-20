@@ -1,4 +1,5 @@
 #include "archive_file_system.hpp"
+#include "zipfs_secret.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -241,6 +242,7 @@ ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       throw IOException("Failed to init libarchive (seek callback): %s",
                         archive_error_string(archive));
     }
+    RegisterPassphrasesToArchive(*context, "archive://" + zip_path, archive);
     if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
                           &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
       throw IOException("Failed to init libarchive (read callback): %s",
@@ -410,6 +412,8 @@ vector<OpenFileInfo> ArchiveFileSystem::Glob(const string &path,
         throw IOException("Failed to init libarchive (seek callback): %s",
                           archive_error_string(archive));
       }
+      RegisterPassphrasesToArchive(*context, "archive://" + curr_zip.path,
+                                   archive);
       if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
                             &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
         throw IOException("Failed to init libarchive (read callback): %s",
@@ -423,10 +427,6 @@ vector<OpenFileInfo> ArchiveFileSystem::Glob(const string &path,
 
         while (archive_read_next_header2(archive, entry) == ARCHIVE_OK) {
           if (archive_entry_mode(entry) & AE_IFDIR) {
-            continue;
-          }
-
-          if (archive_entry_is_encrypted(entry)) {
             continue;
           }
 
@@ -544,6 +544,7 @@ bool ArchiveFileSystem::FileExists(const string &filename,
       throw IOException("Failed to init libarchive (seek callback): %s",
                         archive_error_string(archive));
     }
+    RegisterPassphrasesToArchive(*context, "archive://" + zip_path, archive);
     if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
                           &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
       throw IOException("Failed to init libarchive (read callback): %s",

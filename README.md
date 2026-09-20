@@ -75,11 +75,32 @@ It is also possible to read from a variety of compressed file formats directly:
 SELECT * FROM read_json('compressed://examples/a.jsonl.bz2');
 ```
 
+To read encrypted files from a zip file, create a secret and then use the `archive` scheme:
+```SQL
+CREATE SECRET my_secret_zip (
+    TYPE zip,
+    PASSWORD 'password',
+    SCOPE 'archive://my_secret_zip.zip'
+);
+SELECT * FROM 'archive://my_secret_zip.zip/file.csv';
+```
+
+You may also specify more than one password at a time, they will each be tried for any matching file:
+```SQL
+CREATE SECRET my_secret_zip_list (
+    TYPE zip,
+    PASSWORDS ['pass1', 'pass2'],
+    SCOPE 'archive://my_secret_zip.zip'
+);
+SELECT * FROM 'archive://my_secret_zip.zip/file.csv';
+```
+
 ## Archive vs zip
 
 This extension supports both zip files and archive files. The zip file support is using miniz, the archive file
-support uses libarchive. libarchive supports a wider range of compression algorithms and container formats.
-(Note: xar is not supported on Windows or MinGW.)
+support uses libarchive. libarchive supports a wider range of compression algorithms, container formats and encryption.
+
+(Note: `xar` is not supported on Windows or MinGW.)
 
 ## Performance considerations
 

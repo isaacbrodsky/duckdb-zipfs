@@ -201,6 +201,11 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
       throw IOException("Unknown compression method");
     }
+    if (file_stat.m_is_encrypted) {
+      throw IOException(
+          "Encrypted file: Use CREATE SECRET (TYPE zip, PASSWORD '...', SCOPE "
+          "'archive://....'); and then try again with archive:// URL scheme.");
+    }
 
     // Serve stored members through a windowed handle to keep DuckDB's ranged
     // reads; compressed members fall through to the buffered path below.

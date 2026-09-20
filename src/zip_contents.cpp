@@ -111,9 +111,8 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     }
 
     mz_zip_archive_file_stat stat;
-    mz_zip_reader_file_stat(&zip, i, &stat);
-
-    if (auto err = mz_zip_get_last_error(&zip)) {
+    if (!mz_zip_reader_file_stat(&zip, i, &stat)) {
+      auto err = mz_zip_get_last_error(&zip);
       throw IOException("Problem statting file: %s",
                         mz_zip_get_error_string(err));
     }
@@ -123,6 +122,7 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     output.SetValue(col++, count,
                     Value::UBIGINT(NumericCast<uint64_t>(stat.m_uncomp_size)));
     output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_directory));
+    output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_encrypted));
 
     count++;
   }
@@ -145,6 +145,9 @@ unique_ptr<FunctionData> ReadZipFunctionBind(ClientContext &context,
 
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
+
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
 
   return result;
 }

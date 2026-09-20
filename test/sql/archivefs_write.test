@@ -1,0 +1,21 @@
+# name: test/sql/archivefs_write.test
+# description: test zipfs extension, writing
+# group: [sql]
+
+require zipfs
+
+statement error
+COPY
+    (FROM generate_series(100_000))
+    TO 'archive://examples/output.zip/test.csv'
+    (FORMAT 'csv');
+----
+IO Error: Archive file system can only open for reading
+
+statement error
+COPY
+    (FROM generate_series(100_000))
+    TO 'compressed://examples/output.csv'
+    (FORMAT 'csv');
+----
+IO Error: Archive file system can only open for reading

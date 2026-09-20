@@ -1,5 +1,6 @@
 #include "archive_contents.hpp"
 #include "archive_file_system.hpp"
+#include "zipfs_secret.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -45,6 +46,8 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
         throw IOException("Failed to init libarchive (seek callback): %s",
                           archive_error_string(archive));
       }
+      RegisterPassphrasesToArchive(context, "archive://" + archive_path,
+                                   archive);
       if (archive_read_open(archive, file_handle.get(), &FileSystemZipOpenFunc,
                             &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
         throw IOException("Failed to init libarchive (read callback): %s",
@@ -92,10 +95,16 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
 
   idx_t count = 0;
   while (!global_data.finished && count < output.GetCapacity()) {
-    if (archive_read_next_header2(global_data.archive, global_data.entry) !=
-        ARCHIVE_OK) {
+    auto err =
+        archive_read_next_header2(global_data.archive, global_data.entry);
+    if (err != ARCHIVE_OK) {
+      auto errStrRaw = archive_error_string(global_data.archive);
+      std::string errStr = errStrRaw ? std::string(errStrRaw) : "(unknown)";
       global_data.finished = true;
       global_data.Close();
+      if (err != ARCHIVE_EOF) {
+        throw IOException("Failed list contents: %s", errStr);
+      }
       break;
     }
 
@@ -104,12 +113,14 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
     auto fileSize = archive_entry_size(entry);
     auto fileType = archive_entry_filetype(entry);
     auto isDir = fileType == AE_IFDIR;
+    auto isEncrypted = archive_entry_is_encrypted(entry);
 
     idx_t col = 0;
     output.SetValue(col++, count, Value(pathName));
     output.SetValue(col++, count,
                     Value::UBIGINT(NumericCast<uint64_t>(fileSize)));
     output.SetValue(col++, count, Value::BOOLEAN(isDir));
+    output.SetValue(col++, count, Value::BOOLEAN(isEncrypted));
 
     count++;
   }
@@ -132,6 +143,9 @@ ReadArchiveFunctionBind(ClientContext &context, TableFunctionBindInput &input,
 
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
+
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
 
   return result;
 }

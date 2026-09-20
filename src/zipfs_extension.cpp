@@ -6,6 +6,7 @@
 #include "archive_contents.hpp"
 #include "noop_archive_contents.hpp"
 #include "duckdb.hpp"
+#include "zipfs_secret.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -51,6 +52,20 @@ static void LoadInternal(ExtensionLoader &loader) {
       "the file path within the zip. Will be removed from the zip file name. "
       "Overrides zipfs_extension. Defaults to NULL.",
       LogicalType::VARCHAR, Value(LogicalType::VARCHAR));
+
+  SecretType zipfsSecretType;
+  zipfsSecretType.name = "zip";
+  zipfsSecretType.deserializer = KeyValueSecret::Deserialize<KeyValueSecret>;
+  zipfsSecretType.default_provider = "config";
+  zipfsSecretType.extension = "zipfs";
+  loader.RegisterSecretType(zipfsSecretType);
+
+  CreateSecretFunction createZipfsSecret = {"zip", "config",
+                                            CreateZipSecretFunction};
+  createZipfsSecret.named_parameters["password"] = LogicalType::VARCHAR;
+  createZipfsSecret.named_parameters["passwords"] =
+      LogicalType::LIST(LogicalType::VARCHAR);
+  loader.RegisterFunction(createZipfsSecret);
 }
 
 void ZipfsExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
