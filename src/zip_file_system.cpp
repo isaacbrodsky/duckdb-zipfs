@@ -202,7 +202,9 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       throw IOException("Unknown compression method");
     }
     if (file_stat.m_is_encrypted) {
-      throw IOException("Encrypted file: Use CREATE SECRET (TYPE zip, PASSWORD '...', SCOPE 'archive://....'); and then try again with archive:// URL scheme.");
+      throw IOException(
+          "Encrypted file: Use CREATE SECRET (TYPE zip, PASSWORD '...', SCOPE "
+          "'archive://....'); and then try again with archive:// URL scheme.");
     }
 
     // Serve stored members through a windowed handle to keep DuckDB's ranged

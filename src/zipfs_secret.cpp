@@ -30,7 +30,7 @@ void RegisterPassphrasesToArchive(ClientContext &context,
       Value value;
       if (kv->TryGetValue("password", value) && !value.IsNull()) {
         if (archive_read_add_passphrase(archive,
-                                         value.GetValue<string>().c_str())) {
+                                        value.GetValue<string>().c_str())) {
           throw IOException("Failed to register archive passphrase: %s",
                             archive_error_string(archive));
         }
@@ -40,8 +40,8 @@ void RegisterPassphrasesToArchive(ClientContext &context,
       if (kv->TryGetValue("passwords", listValue) && !listValue.IsNull()) {
         for (const auto &child : ListValue::GetChildren(listValue)) {
           if (!child.IsNull()) {
-            if (archive_read_add_passphrase(
-                    archive, child.GetValue<string>().c_str())) {
+            if (archive_read_add_passphrase(archive,
+                                            child.GetValue<string>().c_str())) {
               throw IOException("Failed to register archive passphrase: %s",
                                 archive_error_string(archive));
             }
