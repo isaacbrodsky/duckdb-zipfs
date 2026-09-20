@@ -29,6 +29,9 @@ unique_ptr<FunctionData> NoopReadArchiveFunctionBind(
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
 
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
+
   return nullptr;
 }
 
