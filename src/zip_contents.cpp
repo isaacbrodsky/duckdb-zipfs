@@ -110,41 +110,19 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
                         mz_zip_get_error_string(err));
     }
 
-    bool hasUncompSize = true;
-    bool isDirectory = mz_zip_reader_is_file_a_directory(&zip, i);
-    if (auto err = mz_zip_get_last_error(&zip)) {
-      throw IOException("Problem checking directory: %s",
+    mz_zip_archive_file_stat stat;
+    if (!mz_zip_reader_file_stat(&zip, i, &stat)) {
+      auto err = mz_zip_get_last_error(&zip);
+      throw IOException("Problem statting file: %s",
                         mz_zip_get_error_string(err));
-    }
-    bool isEncrypted = mz_zip_reader_is_file_encrypted(&zip, i);
-    if (auto err = mz_zip_get_last_error(&zip)) {
-      throw IOException("Problem checking encryption: %s",
-                        mz_zip_get_error_string(err));
-    }
-    uint64_t uncompSize = 0;
-    if (isEncrypted || isDirectory) {
-      hasUncompSize = false;
-    } else {
-      mz_zip_archive_file_stat stat;
-      mz_zip_reader_file_stat(&zip, i, &stat);
-
-      if (auto err = mz_zip_get_last_error(&zip)) {
-        throw IOException("Problem statting file: %s",
-                          mz_zip_get_error_string(err));
-      }
-
-      uncompSize = NumericCast<uint64_t>(stat.m_uncomp_size);
     }
 
     idx_t col = 0;
     output.SetValue(col++, count, Value(zip_filename));
-    if (hasUncompSize) {
-      output.SetValue(col++, count, Value::UBIGINT(uncompSize));
-    } else {
-      output.SetValue(col++, count, Value(LogicalType::UBIGINT));
-    }
-    output.SetValue(col++, count, Value::BOOLEAN(isDirectory));
-    output.SetValue(col++, count, Value::BOOLEAN(isEncrypted));
+    output.SetValue(col++, count,
+                    Value::UBIGINT(NumericCast<uint64_t>(stat.m_uncomp_size)));
+    output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_directory));
+    output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_encrypted));
 
     count++;
   }
