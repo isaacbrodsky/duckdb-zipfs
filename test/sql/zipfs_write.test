@@ -7,7 +7,7 @@ require zipfs
 statement error
 COPY
     (FROM generate_series(100_000))
-    TO 'zip://example/output.zip/test.csv'
+    TO 'zip://examples/output.zip/test.csv'
     (FORMAT 'csv');
 ----
 

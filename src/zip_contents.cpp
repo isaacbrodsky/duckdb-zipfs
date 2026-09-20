@@ -111,9 +111,8 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     }
 
     mz_zip_archive_file_stat stat;
-    mz_zip_reader_file_stat(&zip, i, &stat);
-
-    if (auto err = mz_zip_get_last_error(&zip)) {
+    if (!mz_zip_reader_file_stat(&zip, i, &stat)) {
+      auto err = mz_zip_get_last_error(&zip);
       throw IOException("Problem statting file: %s",
                         mz_zip_get_error_string(err));
     }
