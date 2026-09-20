@@ -1,5 +1,6 @@
 #include "archive_contents.hpp"
 #include "archive_file_system.hpp"
+#include "zipfs_secret.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -45,6 +46,8 @@ struct ReadArchiveFunctionData : public GlobalTableFunctionState {
         throw IOException("Failed to init libarchive (seek callback): %s",
                           archive_error_string(archive));
       }
+      RegisterPassphrasesToArchive(context, "archive://" + archive_path,
+                                   archive);
       if (archive_read_open(archive, file_handle.get(), &FileSystemZipOpenFunc,
                             &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
         throw IOException("Failed to init libarchive (read callback): %s",

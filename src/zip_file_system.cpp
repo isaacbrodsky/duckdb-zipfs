@@ -171,6 +171,9 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
       throw IOException("Unknown compression method");
     }
+    if (file_stat.m_is_encrypted) {
+      throw IOException("Encrypted file: Use CREATE SECRET (TYPE zip, PASSWORD '...', SCOPE 'archive://....'); and then try again with archive:// URL scheme.");
+    }
 
     auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
     mz_zip_reader_extract_file_to_mem(

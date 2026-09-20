@@ -1,4 +1,5 @@
 #include "archive_file_system.hpp"
+#include "zipfs_secret.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -67,6 +68,8 @@ RawArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       throw IOException("Failed to init libarchive (seek callback): %s",
                         archive_error_string(archive));
     }
+    RegisterPassphrasesToArchive(*context, "compressed://" + file_path,
+                                 archive);
     if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
                           &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
       throw IOException("Failed to init libarchive (read callback): %s",
@@ -234,6 +237,8 @@ bool RawArchiveFileSystem::FileExists(const string &filename,
       throw IOException("Failed to init libarchive (seek callback): %s",
                         archive_error_string(archive));
     }
+    RegisterPassphrasesToArchive(*context, "compressed://" + file_path,
+                                 archive);
     if (archive_read_open(archive, zipHandle.get(), &FileSystemZipOpenFunc,
                           &FileSystemZipReadFunc, &FileSystemZipCloseFunc)) {
       throw IOException("Failed to init libarchive (read callback): %s",

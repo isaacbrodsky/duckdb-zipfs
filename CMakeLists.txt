@@ -24,7 +24,8 @@ set(EXTENSION_SOURCES
   src/noop_archive_file_system.cpp
   src/zip_contents.cpp
   src/archive_contents.cpp
-  src/noop_archive_contents.cpp)
+  src/noop_archive_contents.cpp
+  src/zipfs_secret.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})

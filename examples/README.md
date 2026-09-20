@@ -83,3 +83,14 @@ with zipfile.ZipFile('big.zip', 'w') as zf:
     for i in range(2500):
         zf.writestr(f'big_dir/{i}.txt', b'hello')
 ```
+
+Password is `password`
+```
+$ unzip -l passworded.zip
+Archive:  passworded.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+       14  09-19-2026 20:20   secret_file.csv
+---------                     -------
+       14                     1 file
+```
