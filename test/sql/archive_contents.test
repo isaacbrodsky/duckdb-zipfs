@@ -4,7 +4,7 @@
 
 require zipfs
 
-query III
+query IIII
 SELECT * FROM archive_contents('examples/a.zip');
 ----
 nested_dir/	0	true	false
@@ -15,7 +15,7 @@ a.jsonl	26	false	false
 b.csv	11	false	false
 b.jsonl	26	false	false
 
-query III
+query IIII
 select * from archive_contents('examples/a.tar.gz');
 ----
 nested_dir/	0	true	false

@@ -4,10 +4,10 @@
 
 require zipfs
 
-query III
+query IIII
 SELECT * FROM zip_contents('examples/a.zip');
 ----
-nested_dir/	0	true	false
+nested_dir/	NULL	true	false
 nested_dir/some_file.jsonl	26	false	false
 nested_dir/some_file.csv	12	false	false
 a.csv	24	false	false
@@ -33,4 +33,4 @@ select count(*) from zip_contents('examples/big/big.zip');
 query IIII
 select * from zip_contents('examples/passworded.zip');
 ----
-secret_file.csv	14	false	true
+secret_file.csv	NULL	false	true
