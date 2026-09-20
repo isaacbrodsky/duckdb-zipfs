@@ -113,15 +113,11 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     bool hasUncompSize = true;
     bool isDirectory = mz_zip_reader_is_file_a_directory(&zip, i);
     if (auto err = mz_zip_get_last_error(&zip)) {
-      // Not possible: requires reading past end of directory
-      assert(false);
       throw IOException("Problem checking directory: %s",
                         mz_zip_get_error_string(err));
     }
     bool isEncrypted = mz_zip_reader_is_file_encrypted(&zip, i);
     if (auto err = mz_zip_get_last_error(&zip)) {
-      // Not possible: requires reading past end of directory
-      assert(false);
       throw IOException("Problem checking encryption: %s",
                         mz_zip_get_error_string(err));
     }
