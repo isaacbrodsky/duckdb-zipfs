@@ -14,7 +14,7 @@ namespace duckdb {
 void NoopReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
                              DataChunk &output) {
   throw NotImplementedException("duckdb-zipfs was not built with libarchive "
-                                "support. (Not supported on Windows)");
+                                "support.");
 }
 
 unique_ptr<FunctionData> NoopReadArchiveFunctionBind(
@@ -28,6 +28,9 @@ unique_ptr<FunctionData> NoopReadArchiveFunctionBind(
 
   return_types.push_back(LogicalType::BOOLEAN);
   names.emplace_back("is_directory");
+
+  return_types.push_back(LogicalType::BOOLEAN);
+  names.emplace_back("is_encrypted");
 
   return nullptr;
 }
