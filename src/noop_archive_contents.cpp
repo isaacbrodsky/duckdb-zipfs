@@ -19,7 +19,7 @@ void NoopReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
 
 unique_ptr<FunctionData> NoopReadArchiveFunctionBind(
     ClientContext &context, TableFunctionBindInput &input,
-    vector<LogicalType> &return_types, vector<string> &names) {
+    vector<LogicalType> &return_types, vector<Identifier> &names) {
   return_types.push_back(LogicalType::VARCHAR);
   names.emplace_back("file_name");
 

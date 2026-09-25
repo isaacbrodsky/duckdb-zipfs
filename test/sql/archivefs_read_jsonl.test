@@ -25,3 +25,8 @@ a1
 a2
 a1
 a2
+
+statement error
+select * from read_json('compressed://examples/nonexistant.jsonl.gz', format='newline_delimited', compression='uncompressed');
+----
+IO Error: Cannot open file
