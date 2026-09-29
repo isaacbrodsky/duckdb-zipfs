@@ -1,5 +1,5 @@
 [![Extension Test](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/isaacbrodsky/duckdb-zipfs/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.5&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.5)
+[![DuckDB Version](https://img.shields.io/static/v1?label=duckdb&message=v1.5.6&color=blue)](https://github.com/duckdb/duckdb/releases/tag/v1.5.6)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/isaacbrodsky/duckdb-zipfs/graph/badge.svg?token=7L9I18PH9V)](https://codecov.io/gh/isaacbrodsky/duckdb-zipfs)
 
