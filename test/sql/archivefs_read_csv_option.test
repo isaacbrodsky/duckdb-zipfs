@@ -74,7 +74,7 @@ Failed to find file
 statement error
 select * from read_csv('archive://examples/a.tar.gz/*.csv', union_by_name = true);
 ----
-No files found that match the pattern
+IO Error:
 
 # No .zip
 statement error
