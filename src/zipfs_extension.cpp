@@ -11,7 +11,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
-#include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
+#include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 
 namespace duckdb {
 
@@ -21,22 +21,56 @@ static void LoadInternal(ExtensionLoader &loader) {
 
   auto &fs = loader.GetDatabaseInstance().GetFileSystem();
   fs.RegisterSubSystem(make_uniq<ZipFileSystem>());
-  loader.RegisterFunction(TableFunction("zip_contents", {LogicalType::VARCHAR},
-                                        ReadZipFunction, ReadZipFunctionBind,
-                                        ReadZipFunctionInit));
+  auto zipContents =
+      TableFunction("zip_contents", {LogicalType::VARCHAR}, ReadZipFunction,
+                    ReadZipFunctionBind, ReadZipFunctionInit);
+
+  auto createZipContents = CreateTableFunctionInfo(zipContents);
+  FunctionDescription zipDesc;
+  zipDesc.parameter_names = {"zip_path"};
+  zipDesc.parameter_types = {LogicalType::VARCHAR};
+  zipDesc.description = "Returns a table of the files in the zip archive.";
+  zipDesc.examples = {"SELECT * FROM zip_contents('example.zip');",
+                      "SELECT file_name, file_size, is_directory, is_encrypted "
+                      "FROM zip_contents('example.zip');"};
+  zipDesc.categories = {"zip"};
+  createZipContents.descriptions.push_back(zipDesc);
+  loader.RegisterFunction(createZipContents);
 
 #ifdef ENABLE_LIBARCHIVE
   fs.RegisterSubSystem(make_uniq<ArchiveFileSystem>());
   fs.RegisterSubSystem(make_uniq<RawArchiveFileSystem>());
-  loader.RegisterFunction(TableFunction(
+  auto archiveContents = TableFunction(
       "archive_contents", {LogicalType::VARCHAR}, ReadArchiveFunction,
-      ReadArchiveFunctionBind, ReadArchiveFunctionInit));
+      ReadArchiveFunctionBind, ReadArchiveFunctionInit);
+  auto createArchiveContents = CreateTableFunctionInfo(archiveContents);
+  FunctionDescription archiveDesc;
+  archiveDesc.parameter_names = {"archive_path"};
+  archiveDesc.parameter_types = {LogicalType::VARCHAR};
+  archiveDesc.description = "Returns a table of the files in the archive.";
+  archiveDesc.examples = {"SELECT * FROM archive_contents('example.zip');",
+                          "SELECT file_name, file_size, is_directory, "
+                          "is_encrypted FROM archive_contents('example.zip');"};
+  archiveDesc.categories = {"zip"};
+  createArchiveContents.descriptions.push_back(archiveDesc);
+  loader.RegisterFunction(createArchiveContents);
 #else
   fs.RegisterSubSystem(make_uniq<NoopArchiveFileSystem>());
   fs.RegisterSubSystem(make_uniq<NoopRawArchiveFileSystem>());
-  loader.RegisterFunction(TableFunction(
+  auto archiveContents = TableFunction(
       "archive_contents", {LogicalType::VARCHAR}, NoopReadArchiveFunction,
-      NoopReadArchiveFunctionBind, NoopReadArchiveFunctionInit));
+      NoopReadArchiveFunctionBind, NoopReadArchiveFunctionInit);
+  auto createArchiveContents = CreateTableFunctionInfo(archiveContents);
+  FunctionDescription archiveDesc;
+  archiveDesc.parameter_names = {"archive_path"};
+  archiveDesc.parameter_types = {LogicalType::VARCHAR};
+  archiveDesc.description = "Returns a table of the files in the archive.";
+  archiveDesc.examples = {"SELECT * FROM archive_contents('example.zip');",
+                          "SELECT file_name, file_size, is_directory, "
+                          "is_encrypted FROM archive_contents('example.zip');"};
+  archiveDesc.categories = {"zip"};
+  createArchiveContents.descriptions.push_back(archiveDesc);
+  loader.RegisterFunction(createArchiveContents);
 #endif // ENABLE_LIBARCHIVE
 
   auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());

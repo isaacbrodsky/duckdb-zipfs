@@ -97,6 +97,7 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
   auto &global_data = data.global_state->Cast<ReadArchiveFunctionData>();
 
   idx_t count = 0;
+  idx_t capacity = ChunkSize(output);
   while (!global_data.finished && count < capacity) {
     auto err =
         archive_read_next_header2(global_data.archive, global_data.entry);
@@ -117,7 +118,6 @@ void ReadArchiveFunction(ClientContext &context, TableFunctionInput &data,
     auto fileType = archive_entry_filetype(entry);
     auto isEncrypted = archive_entry_is_encrypted(entry);
     auto isDir = fileType == AE_IFDIR;
-    auto isEncrypted = archive_entry_is_encrypted(entry);
 
     idx_t col = 0;
     output.data[col++].Append(pathName);
