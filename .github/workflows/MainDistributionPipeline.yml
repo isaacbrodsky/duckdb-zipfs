@@ -24,7 +24,7 @@ jobs:
     name: Build extension binaries (stable)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
     with:
-      duckdb_version: v2.0-cyanoptera
+      duckdb_version: v2.0.0
       ci_tools_version: v2.0-cyanoptera
       extension_name: zipfs
 
@@ -32,7 +32,7 @@ jobs:
     name: Code Quality Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v2.0-cyanoptera
     with:
-      duckdb_version: v2.0-cyanoptera
+      duckdb_version: v2.0.0
       ci_tools_version: v2.0-cyanoptera
       extension_name: zipfs
       format_checks: 'format' # ';tidy' doesn't work with vcpkg
