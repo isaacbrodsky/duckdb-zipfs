@@ -75,8 +75,8 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
   zip_filename.reserve(1024);
 
   idx_t count = 0;
-  while (count < output.GetCapacity() &&
-         global_data.entry_idx < global_data.entry_count) {
+  idx_t capacity = ChunkSize(output);
+  while (count < capacity && global_data.entry_idx < global_data.entry_count) {
     mz_uint i = global_data.entry_idx++;
 
     mz_zip_clear_last_error(&zip);
@@ -118,22 +118,22 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     }
 
     idx_t col = 0;
-    output.SetValue(col++, count, Value(zip_filename));
-    output.SetValue(col++, count,
-                    Value::UBIGINT(NumericCast<uint64_t>(stat.m_uncomp_size)));
-    output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_directory));
-    output.SetValue(col++, count, Value::BOOLEAN(stat.m_is_encrypted));
+    output.data[col++].Append(zip_filename);
+    output.data[col++].Append(
+        Value::UBIGINT(NumericCast<uint64_t>(stat.m_uncomp_size)));
+    output.data[col++].Append(Value::BOOLEAN(stat.m_is_directory));
+    output.data[col++].Append(Value::BOOLEAN(stat.m_is_encrypted));
 
     count++;
   }
 
-  output.SetCardinality(count);
+  output.CheckCardinality(count);
 }
 
 unique_ptr<FunctionData> ReadZipFunctionBind(ClientContext &context,
                                              TableFunctionBindInput &input,
                                              vector<LogicalType> &return_types,
-                                             vector<string> &names) {
+                                             vector<Identifier> &names) {
   auto result = make_uniq<ReadZipFunctionBindData>();
   result->file_path = input.inputs[0].GetValue<string>();
 
