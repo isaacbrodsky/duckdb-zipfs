@@ -121,3 +121,25 @@ Blocks = 1
 ------------------- ----- ------------ ------------  ------------------------
 2026-09-20 14:35:33                 12           16  1 files
 ```
+
+`cp437_names.zip` has entry names in code page 437 without the UTF-8 flag (general
+purpose bit 11), as Windows' built-in zipper writes them, next to one name that sets
+the flag. Python's `zipfile` decodes legacy names as CP437 too:
+
+```
+$ python3 -c "import zipfile; [print(hex(i.flag_bits), i.compress_type, i.filename) for i in zipfile.ZipFile('cp437_names.zip').infolist()]"
+0x0 8 Hörschwag.csv
+0x0 0 Grüße.csv
+0x800 8 utf8_flagged_ü.csv
+```
+
+`unicode_path.zip` has legacy names with an Info-ZIP Unicode Path extra field
+(0x7075), as WinRAR and 7-Zip write them: `Łódź.csv` stored in CP852 with a
+matching field, and `Grüße.csv` stored in CP437 with a stale field (CRC for a
+different name) that readers must ignore. Python's `zipfile` reads it the same way:
+
+```
+$ python3 -c "import zipfile; [print(i.filename) for i in zipfile.ZipFile('unicode_path.zip').infolist()]"
+Łódź.csv
+Grüße.csv
+```

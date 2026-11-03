@@ -1,5 +1,6 @@
 #include "zip_contents.hpp"
 #include "zip_file_system.hpp"
+#include "zip_names.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -70,10 +71,6 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
   auto &global_data = data.global_state->Cast<ReadZipFunctionData>();
   auto &zip = global_data.zip;
 
-  string zip_filename;
-  const size_t MAX_FILENAME_LEN = 65536; // = 2**16
-  zip_filename.reserve(1024);
-
   idx_t count = 0;
   idx_t capacity = ChunkSize(output);
   while (count < capacity && global_data.entry_idx < global_data.entry_count) {
@@ -83,28 +80,7 @@ void ReadZipFunction(ClientContext &context, TableFunctionInput &data,
     mz_zip_validate_file(&zip, i, MZ_ZIP_FLAG_VALIDATE_HEADERS_ONLY);
     mz_zip_clear_last_error(&zip);
 
-    mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr, 0);
-    // NOTE: filename_size already contains +1 for the leading \0
-    // Double filename capacity/length until it's enough or larger than
-    // 2**16, where 2**16 should be the max filename length in zip files.
-    if (filename_size > zip_filename.capacity()) {
-      size_t new_capacity =
-          zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
-      while (new_capacity < filename_size) {
-        new_capacity *= 2;
-        if (new_capacity > MAX_FILENAME_LEN) {
-          throw IOException("Filename too long");
-        }
-      }
-      zip_filename.reserve(new_capacity);
-    }
-    if (filename_size == 0) {
-      throw IOException("Problem getting filename (zero): %s",
-                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
-    }
-
-    zip_filename.resize(filename_size - 1);
-    mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
+    auto zip_filename = ZipEntryName(zip, i);
     if (auto err = mz_zip_get_last_error(&zip)) {
       throw IOException("Problem getting filename: %s",
                         mz_zip_get_error_string(err));
