@@ -14,6 +14,7 @@ static constexpr mz_uint16 ZIP_FLAG_UTF8_NAME = 1 << 11;
 // Code page 437, bytes 0x80-0xFF, as UTF-8. Bytes below 0x80 are ASCII.
 // The zip spec (APPNOTE 4.4.4) makes CP437 the encoding of every name that
 // does not set bit 11, and that is what Windows' built-in zipper writes.
+// clang-format off
 static const char *const CP437_HIGH[128] = {
     "Ç", "ü", "é", "â", "ä", "à", "å", "ç", "ê", "ë", "è", "ï", "î", "ì", "Ä", "Å",
     "É", "æ", "Æ", "ô", "ö", "ò", "û", "ù", "ÿ", "Ö", "Ü", "¢", "£", "¥", "₧", "ƒ",
@@ -23,6 +24,7 @@ static const char *const CP437_HIGH[128] = {
     "╨", "╤", "╥", "╙", "╘", "╒", "╓", "╫", "╪", "┘", "┌", "█", "▄", "▌", "▐", "▀",
     "α", "ß", "Γ", "π", "Σ", "σ", "µ", "τ", "Φ", "Θ", "Ω", "δ", "∞", "φ", "ε", "∩",
     "≡", "±", "≥", "≤", "⌠", "⌡", "÷", "≈", "°", "∙", "·", "√", "ⁿ", "²", "■", "\xC2\xA0"};
+// clang-format on
 
 inline string Cp437ToUtf8(const string &raw) {
   string out;

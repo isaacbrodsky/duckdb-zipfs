@@ -1,7 +1,9 @@
 # name: test/sql/zipfs_cp437_names.test
-# description: entry names without the UTF-8 flag are CP437 (APPNOTE 4.4.4) and
-#              come back as UTF-8 instead of failing with "Invalid unicode"
+# description: legacy (non-UTF-8) zip entry names are decoded to UTF-8
 # group: [sql]
+
+# Names without the UTF-8 flag are CP437 (APPNOTE 4.4.4); they come back as
+# UTF-8 instead of failing with "Invalid unicode".
 
 require zipfs
 
