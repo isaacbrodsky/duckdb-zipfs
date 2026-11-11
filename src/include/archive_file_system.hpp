@@ -70,8 +70,12 @@ public:
   ~ArchiveFileHandle() override;
   void Close() override;
 
-  // Compressed archive entries cannot be randomly seeked.
-  bool CanSeek() override { return false; }
+  // Compressed archive entries cannot be randomly seeked, unless the entry was
+  // buffered for a random-access reader (see NeedsRandomAccess).
+  bool CanSeek() override { return buffered != nullptr; }
+
+  // Inflate the whole entry into memory (random-access formats only).
+  void BufferFully();
 
   // Sequential read at the current logical position (advances it).
   int64_t ReadBytes(void *buffer, int64_t nr_bytes);
@@ -112,6 +116,9 @@ private:
   std::atomic<idx_t> seek_offset;
   int64_t sz;                   // uncompressed size, or -1 if not yet known
   unique_ptr<data_t[]> scratch; // discard buffer for forward seeks / size probe
+  // whole entry, only when BufferFully() was called (random-access formats)
+  vector<data_t> buffered_data;
+  data_t *buffered = nullptr;
   std::mutex stream_lock;
 };
 

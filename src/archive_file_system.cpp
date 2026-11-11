@@ -266,8 +266,39 @@ void ArchiveFileHandle::SeekTo(idx_t target) {
   }
 }
 
+void ArchiveFileHandle::BufferFully() {
+  std::lock_guard<std::mutex> lock(stream_lock);
+  InitStream();
+  buffered_data.clear();
+  if (sz > 0) {
+    buffered_data.reserve(UnsafeNumericCast<idx_t>(sz));
+  }
+  while (true) {
+    auto read_bytes = archive_read_data(archive, scratch.get(), BLOCK_SIZE);
+    if (read_bytes < 0) {
+      throw IOException("Failed to read: %s", archive_error_string(archive));
+    }
+    if (read_bytes == 0) {
+      break;
+    }
+    buffered_data.insert(buffered_data.end(), scratch.get(),
+                         scratch.get() + read_bytes);
+  }
+  CloseStream();
+  sz = UnsafeNumericCast<int64_t>(buffered_data.size());
+  buffered = buffered_data.data();
+}
+
 int64_t ArchiveFileHandle::ReadBytes(void *buffer, int64_t nr_bytes) {
   std::lock_guard<std::mutex> lock(stream_lock);
+  if (buffered) {
+    auto pos = MinValue<idx_t>(seek_offset, UnsafeNumericCast<idx_t>(sz));
+    auto n = MinValue<idx_t>(UnsafeNumericCast<idx_t>(nr_bytes),
+                             UnsafeNumericCast<idx_t>(sz) - pos);
+    memcpy(buffer, buffered + pos, n);
+    seek_offset = pos + n;
+    return UnsafeNumericCast<int64_t>(n);
+  }
   SeekTo(seek_offset);
   auto n = ReadStream(buffer, nr_bytes);
   seek_offset += UnsafeNumericCast<idx_t>(n);
@@ -277,6 +308,17 @@ int64_t ArchiveFileHandle::ReadBytes(void *buffer, int64_t nr_bytes) {
 void ArchiveFileHandle::ReadBytesAt(void *buffer, int64_t nr_bytes,
                                     idx_t location) {
   std::lock_guard<std::mutex> lock(stream_lock);
+  if (buffered) {
+    if (location + UnsafeNumericCast<idx_t>(nr_bytes) >
+        UnsafeNumericCast<idx_t>(sz)) {
+      throw IOException("Could not read enough bytes from archive entry "
+                        "\"%s\": attempted to read %lld bytes from location "
+                        "%llu",
+                        entry_name, nr_bytes, location);
+    }
+    memcpy(buffer, buffered + location, UnsafeNumericCast<size_t>(nr_bytes));
+    return;
+  }
   SeekTo(location);
   auto n = ReadStream(buffer, nr_bytes);
   if (n != nr_bytes) {
@@ -366,6 +408,9 @@ ArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   // Open the decompression stream now so a missing entry fails fast and the
   // uncompressed size is captured if the archive records it.
   archive_file_handle->InitStream();
+  if (NeedsRandomAccess(file_path)) {
+    archive_file_handle->BufferFully();
+  }
   return archive_file_handle;
 }
 

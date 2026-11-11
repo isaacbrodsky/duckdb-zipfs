@@ -137,13 +137,9 @@ void StreamingZipFileHandle::ReadInto(void *buffer, idx_t nr_bytes,
   std::lock_guard<std::mutex> lock(stream_lock);
 
   // Non-seekable: DuckDB reads compressed members forward. A backward location
-  // would require re-inflating from the start, which we deliberately do not do.
+  // (rare: e.g. the JSON reader re-reading the start after sniffing) restarts
+  // inflation from the beginning and skips forward.
   if (!iter || location < stream_pos) {
-    if (location < stream_pos) {
-      throw IOException("Cannot seek backwards in compressed zip entry \"%s\" "
-                        "(requested %llu, at %llu)",
-                        file_stat.m_filename, location, stream_pos);
-    }
     InitStream();
   }
 
@@ -305,6 +301,21 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       mz_zip_reader_end(zip.get());
       return make_uniq<WindowedZipFileHandle>(
           *this, path, flags, std::move(handle), file_stat, data_offset);
+    }
+
+    // Random-access formats (parquet, ...) need real seeks: inflate once.
+    if (NeedsRandomAccess(normalized_file_path)) {
+      auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
+      if (!mz_zip_reader_extract_to_mem(zip.get(), file_index, read_buf.get(),
+                                        file_stat.m_uncomp_size, 0)) {
+        throw IOException(
+            "Failed to extract zip entry: %s",
+            mz_zip_get_error_string(mz_zip_get_last_error(zip.get())));
+      }
+      mz_zip_reader_end(zip.get());
+      return make_uniq<BufferedZipFileHandle>(*this, path, flags,
+                                              std::move(handle), file_stat,
+                                              std::move(read_buf));
     }
 
     // Compressed member: hand the still-open reader to the streaming handle,

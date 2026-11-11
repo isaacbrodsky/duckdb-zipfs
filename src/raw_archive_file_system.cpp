@@ -55,6 +55,15 @@ RawArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
       /*entry_name=*/"");
   // Open the decompression stream now so an unreadable file fails fast.
   archive_file_handle->InitStream();
+  // data.parquet.gz etc.: random-access readers get the inflated file buffered.
+  auto inner_name = path;
+  auto dot = inner_name.rfind('.');
+  if (dot != string::npos) {
+    inner_name = inner_name.substr(0, dot);
+  }
+  if (NeedsRandomAccess(inner_name)) {
+    archive_file_handle->BufferFully();
+  }
   return archive_file_handle;
 }
 

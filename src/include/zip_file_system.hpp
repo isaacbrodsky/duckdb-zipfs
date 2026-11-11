@@ -36,11 +36,33 @@ protected:
   idx_t seek_offset;
 };
 
+// A compressed member that a random-access reader (see NeedsRandomAccess)
+// will seek around in: inflated once into memory and served from there.
+class BufferedZipFileHandle final : public ZipFileHandle {
+public:
+  BufferedZipFileHandle(FileSystem &file_system, const string &path,
+                        FileOpenFlags flags,
+                        unique_ptr<FileHandle> inner_handle_p,
+                        const mz_zip_archive_file_stat &file_stat,
+                        unique_ptr<data_t[]> data)
+      : ZipFileHandle(file_system, path, flags, std::move(inner_handle_p),
+                      file_stat),
+        data(std::move(data)) {}
+
+  void ReadInto(void *buffer, idx_t nr_bytes, idx_t location) override {
+    memcpy(buffer, data.get() + location, nr_bytes);
+  }
+
+private:
+  unique_ptr<data_t[]> data;
+};
+
 // A compressed (DEFLATE) member streamed on demand via miniz's extract
 // iterator. The decompressed bytes are NEVER fully materialized: the iterator
 // is kept open and read incrementally, so entries larger than memory can be
 // read. Compressed members are NOT randomly seekable (CanSeek() == false), so
-// DuckDB reads them forward; ReadInto only supports non-decreasing locations.
+// DuckDB reads them forward. A backward location (e.g. the JSON reader going
+// back to the start after sniffing) restarts inflation from the beginning.
 class StreamingZipFileHandle final : public ZipFileHandle {
 public:
   StreamingZipFileHandle(FileSystem &file_system, const string &path,
