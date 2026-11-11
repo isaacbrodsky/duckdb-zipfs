@@ -15,7 +15,7 @@ unique_ptr<BaseSecret> CreateZipSecretFunction(ClientContext &context,
 
 #ifdef ENABLE_LIBARCHIVE
 vector<string> LookupArchivePassphrases(ClientContext &context,
-                                       const string &archivePath);
+                                        const string &archivePath);
 void RegisterPassphrasesToArchive(ClientContext &context,
                                   const string &archivePath,
                                   struct archive *archive);

@@ -61,7 +61,7 @@ unique_ptr<BaseSecret> CreateZipSecretFunction(ClientContext &context,
 
 #ifdef ENABLE_LIBARCHIVE
 vector<string> LookupArchivePassphrases(ClientContext &context,
-                                       const string &archivePath) {
+                                        const string &archivePath) {
   vector<string> passphrases;
   auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
   auto match =
@@ -89,7 +89,8 @@ vector<string> LookupArchivePassphrases(ClientContext &context,
 void RegisterPassphrasesToArchive(ClientContext &context,
                                   const string &archivePath,
                                   struct archive *archive) {
-  for (const auto &passphrase : LookupArchivePassphrases(context, archivePath)) {
+  for (const auto &passphrase :
+       LookupArchivePassphrases(context, archivePath)) {
     if (archive_read_add_passphrase(archive, passphrase.c_str())) {
       throw IOException("Failed to register archive passphrase: %s",
                         archive_error_string(archive));
