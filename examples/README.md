@@ -125,7 +125,9 @@ Blocks = 1
 of `id, dbl, name`) used to exercise the streaming read paths: multi-block
 forward reads through DEFLATE (zip), `archive://` (tar.gz) and raw
 `compressed://` (gzip). The DEFLATE-compressed `numbers.parquet` is also included
-to assert that a backward-seeking reader is rejected on a non-seekable entry.
+to assert that random-access formats keep working through the buffered path.
+`jsonl_large.zip` (50,000 rows of NDJSON) makes the JSON reader go back to the
+start of a streamed DEFLATE entry after sniffing it.
 They are generated with:
 
 ```
@@ -134,4 +136,6 @@ $ duckdb -c "COPY (SELECT i AS id, i*2 AS dbl, ('row_' || i) AS name FROM range(
 $ zip -j data.zip numbers.parquet numbers.csv
 $ tar czf data.tar.gz numbers.parquet numbers.csv
 $ gzip -n numbers.csv     # -> numbers.csv.gz
+$ duckdb -c "COPY (SELECT range AS id, 'row_' || range AS name, range*2 AS dbl FROM range(50000)) TO 'numbers.jsonl' (FORMAT json);"
+$ zip -9 jsonl_large.zip numbers.jsonl
 ```

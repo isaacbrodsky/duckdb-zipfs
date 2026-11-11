@@ -4,9 +4,10 @@
 
 #              stopped being buffered fully into memory. DEFLATE (zip) and all
 #              archive:// / compressed:// entries are streamed forward-only
-#              (CanSeek() == false), so sequential readers (read_csv) succeed
-#              with bounded memory, while readers that seek backwards (parquet,
-#              whose metadata is at the end of the file) are rejected.
+#              (CanSeek() == false), so sequential readers (read_csv,
+#              read_json) succeed with bounded memory. Random-access formats
+#              (parquet, whose footer is at the end of the file) are buffered
+#              in memory as before, so they keep working.
 
 require zipfs
 
@@ -15,17 +16,34 @@ require parquet
 require notwindows
 
 # ------------------------------------------------------------------------------
-# Parquet inside a zip. numbers.parquet is DEFLATE-compressed, so it is streamed
-# non-seekably. Parquet reads the footer at the END of the file, which needs a
-# backward seek — DuckDB rejects this on a non-seekable (FIFO) handle. To read
-# parquet from a zip, store it uncompressed (`zip -0`) so it is windowed and
-# fully seekable.
+# Parquet inside a zip. numbers.parquet is DEFLATE-compressed. Parquet reads the
+# footer at the END of the file and then seeks around, which a forward-only
+# stream cannot serve, so random-access formats keep the buffered path.
 # ------------------------------------------------------------------------------
 
-statement error
+query II
 SELECT count(*), sum(id) FROM 'zip://examples/data.zip/numbers.parquet';
 ----
-FIFO stream is not supported
+10000	49995000
+
+# ------------------------------------------------------------------------------
+# NDJSON inside a zip (50k rows, ~2.4 MB uncompressed). The JSON reader goes back
+# to the start of the file after sniffing it; a streamed member restarts
+# inflation on a backward read instead of failing.
+# ------------------------------------------------------------------------------
+
+query II
+SELECT count(*), sum(dbl)
+FROM read_json('zip://examples/jsonl_large.zip/numbers.jsonl', format = 'newline_delimited');
+----
+50000	2499950000
+
+query I
+SELECT name
+FROM read_json('zip://examples/jsonl_large.zip/numbers.jsonl', format = 'newline_delimited')
+WHERE id = 49999;
+----
+row_49999
 
 # ------------------------------------------------------------------------------
 # Large CSV inside a zip (uncompressed ~190 KB, far larger than ZIP_BLOCK_SIZE),
@@ -56,17 +74,16 @@ WHERE a.id < 100;
 
 # ------------------------------------------------------------------------------
 # Same entries inside a tar.gz, read through archive:// (libarchive). archive://
-# is always streamed non-seekably, so CSV (forward) works and parquet is
-# rejected, just like DEFLATE in a zip.
+# streams CSV forward and buffers parquet, just like DEFLATE in a zip.
 # ------------------------------------------------------------------------------
 
 statement ok
 SET zipfs_split = "!!";
 
-statement error
+query II
 SELECT count(*), sum(id) FROM 'archive://examples/data.tar.gz!!numbers.parquet';
 ----
-FIFO stream is not supported
+10000	49995000
 
 query I
 SELECT name FROM 'archive://examples/data.tar.gz!!numbers.csv' WHERE id = 9999;
