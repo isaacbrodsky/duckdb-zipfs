@@ -120,4 +120,22 @@ Blocks = 1
 2026-09-20 14:35:33 ....A           12           16  file_name_secret.csv
 ------------------- ----- ------------ ------------  ------------------------
 2026-09-20 14:35:33                 12           16  1 files
+
+`data.zip`, `data.tar.gz` and `numbers.csv.gz` hold larger entries (10,000 rows
+of `id, dbl, name`) used to exercise the streaming read paths: multi-block
+forward reads through DEFLATE (zip), `archive://` (tar.gz) and raw
+`compressed://` (gzip). The DEFLATE-compressed `numbers.parquet` is also included
+to assert that random-access formats keep working through the buffered path.
+`streaming/jsonl_large.zip` (50,000 rows of NDJSON) makes the JSON reader go back to the
+start of a streamed DEFLATE entry after sniffing it.
+They are generated with:
+
+```
+$ duckdb -c "COPY (SELECT i AS id, i*2 AS dbl, ('row_' || i) AS name FROM range(10000) t(i)) TO 'numbers.parquet' (FORMAT parquet);"
+$ duckdb -c "COPY (SELECT i AS id, i*2 AS dbl, ('row_' || i) AS name FROM range(10000) t(i)) TO 'numbers.csv' (FORMAT csv, HEADER);"
+$ zip -j data.zip numbers.parquet numbers.csv
+$ tar czf data.tar.gz numbers.parquet numbers.csv
+$ gzip -n numbers.csv     # -> numbers.csv.gz
+$ duckdb -c "COPY (SELECT range AS id, 'row_' || range AS name, range*2 AS dbl FROM range(50000)) TO 'numbers.jsonl' (FORMAT json);"
+$ zip -9 jsonl_large.zip numbers.jsonl
 ```

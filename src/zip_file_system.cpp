@@ -91,6 +91,86 @@ static pair<string, string> SplitArchivePath(const string &path,
 void ZipFileHandle::Close() { inner_handle->Close(); }
 
 //------------------------------------------------------------------------------
+// Streaming Zip File Handle (compressed / DEFLATE members)
+//------------------------------------------------------------------------------
+
+StreamingZipFileHandle::~StreamingZipFileHandle() {
+  CloseStream();
+  if (zip) {
+    mz_zip_reader_end(zip);
+    delete zip;
+    zip = nullptr;
+  }
+}
+
+void StreamingZipFileHandle::Close() {
+  CloseStream();
+  if (zip) {
+    mz_zip_reader_end(zip);
+    delete zip;
+    zip = nullptr;
+  }
+  if (inner_handle) {
+    inner_handle->Close();
+  }
+}
+
+void StreamingZipFileHandle::CloseStream() {
+  if (iter) {
+    mz_zip_reader_extract_iter_free(iter);
+    iter = nullptr;
+  }
+}
+
+void StreamingZipFileHandle::InitStream() {
+  CloseStream();
+  iter = mz_zip_reader_extract_iter_new(zip, file_index, 0);
+  if (!iter) {
+    throw IOException("Could not start streaming zip entry: %s",
+                      mz_zip_get_error_string(mz_zip_get_last_error(zip)));
+  }
+  stream_pos = 0;
+}
+
+void StreamingZipFileHandle::ReadInto(void *buffer, idx_t nr_bytes,
+                                      idx_t location) {
+  std::lock_guard<std::mutex> lock(stream_lock);
+
+  // Non-seekable: DuckDB reads compressed members forward. A backward location
+  // (rare: e.g. the JSON reader re-reading the start after sniffing) restarts
+  // inflation from the beginning and skips forward.
+  if (!iter || location < stream_pos) {
+    InitStream();
+  }
+
+  // Skip forward to the requested location by inflating and discarding.
+  while (stream_pos < location) {
+    auto want = MinValue<idx_t>(UnsafeNumericCast<idx_t>(ZIP_BLOCK_SIZE),
+                                location - stream_pos);
+    size_t got = mz_zip_reader_extract_iter_read(iter, scratch.get(), want);
+    if (got == 0) {
+      throw IOException("Failed to read zip entry: %s",
+                        mz_zip_get_error_string(mz_zip_get_last_error(zip)));
+    }
+    stream_pos += UnsafeNumericCast<idx_t>(got);
+  }
+
+  // Read the requested range.
+  idx_t total = 0;
+  auto out = static_cast<char *>(buffer);
+  while (total < nr_bytes) {
+    size_t got = mz_zip_reader_extract_iter_read(
+        iter, out + total, UnsafeNumericCast<size_t>(nr_bytes - total));
+    if (got == 0) {
+      throw IOException("Failed to read zip entry: %s",
+                        mz_zip_get_error_string(mz_zip_get_last_error(zip)));
+    }
+    total += UnsafeNumericCast<idx_t>(got);
+  }
+  stream_pos += total;
+}
+
+//------------------------------------------------------------------------------
 // Zip File System
 //------------------------------------------------------------------------------
 
@@ -170,21 +250,26 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 
   idx_t size = handle->GetFileSize();
 
-  mz_zip_archive zip;
-  mz_zip_zero_struct(&zip);
-  zip.m_pRead = &FileSystemZipReadFunc;
-  zip.m_pIO_opaque = handle.get();
+  // The central-directory reader must stay alive for streaming (compressed)
+  // members because the extract iterator reads through it, so it is heap
+  // allocated and either freed here (stored / error paths) or handed to and
+  // owned by the StreamingZipFileHandle.
+  auto zip = make_uniq<mz_zip_archive>();
+  mz_zip_zero_struct(zip.get());
+  zip->m_pRead = &FileSystemZipReadFunc;
+  zip->m_pIO_opaque = handle.get();
   try {
     mz_uint zip_flags = 0;
 
-    if (!mz_zip_reader_init(&zip, size, zip_flags)) {
-      throw IOException("Could not open as zip file: %s",
-                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+    if (!mz_zip_reader_init(zip.get(), size, zip_flags)) {
+      throw IOException(
+          "Could not open as zip file: %s",
+          mz_zip_get_error_string(mz_zip_get_last_error(zip.get())));
     }
 
     mz_uint file_index = 0;
     auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
+        mz_zip_reader_locate_file_v2(zip.get(), normalized_file_path.c_str(),
                                      nullptr, 0, &file_index) == MZ_FALSE;
     if (locate_failed) {
       throw IOException("Failed to find file: %s", normalized_file_path);
@@ -192,11 +277,12 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
 
     mz_zip_archive_file_stat file_stat = {0};
     auto stat_failed =
-        mz_zip_reader_file_stat(&zip, file_index, &file_stat) == MZ_FALSE;
+        mz_zip_reader_file_stat(zip.get(), file_index, &file_stat) == MZ_FALSE;
 
     if (stat_failed) {
-      throw IOException("Problem stat-ing file within archive: %s",
-                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+      throw IOException(
+          "Problem stat-ing file within archive: %s",
+          mz_zip_get_error_string(mz_zip_get_last_error(zip.get())));
     }
     if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED)) {
       throw IOException("Unknown compression method");
@@ -207,28 +293,38 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
           "'archive://....'); and then try again with archive:// URL scheme.");
     }
 
-    // Serve stored members through a windowed handle to keep DuckDB's ranged
-    // reads; compressed members fall through to the buffered path below.
+    // Serve stored members through a seekable windowed handle to keep DuckDB's
+    // ranged reads; compressed members stream (non-seekable) below.
     idx_t data_offset;
     if (file_stat.m_method == 0 && !file_stat.m_is_encrypted &&
         StoredMemberDataOffset(*handle, file_stat, size, &data_offset)) {
-      mz_zip_reader_end(&zip);
+      mz_zip_reader_end(zip.get());
       return make_uniq<WindowedZipFileHandle>(
           *this, path, flags, std::move(handle), file_stat, data_offset);
     }
 
-    auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
-    mz_zip_reader_extract_file_to_mem(
-        &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
+    // Random-access formats (parquet, ...) need real seeks: inflate once.
+    if (NeedsRandomAccess(normalized_file_path)) {
+      auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
+      if (!mz_zip_reader_extract_to_mem(zip.get(), file_index, read_buf.get(),
+                                        file_stat.m_uncomp_size, 0)) {
+        throw IOException(
+            "Failed to extract zip entry: %s",
+            mz_zip_get_error_string(mz_zip_get_last_error(zip.get())));
+      }
+      mz_zip_reader_end(zip.get());
+      return make_uniq<BufferedZipFileHandle>(*this, path, flags,
+                                              std::move(handle), file_stat,
+                                              std::move(read_buf));
+    }
 
-    auto zip_file_handle = make_uniq<BufferedZipFileHandle>(
-        *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
-
-    mz_zip_reader_end(&zip);
-
-    return zip_file_handle;
+    // Compressed member: hand the still-open reader to the streaming handle,
+    // which owns it and the extract iterator for the rest of its lifetime.
+    return make_uniq<StreamingZipFileHandle>(*this, path, flags,
+                                             std::move(handle), file_stat,
+                                             zip.release(), file_index);
   } catch (Exception &ex) {
-    mz_zip_reader_end(&zip);
+    mz_zip_reader_end(zip.get());
     throw;
   }
 }
