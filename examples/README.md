@@ -126,7 +126,7 @@ of `id, dbl, name`) used to exercise the streaming read paths: multi-block
 forward reads through DEFLATE (zip), `archive://` (tar.gz) and raw
 `compressed://` (gzip). The DEFLATE-compressed `numbers.parquet` is also included
 to assert that random-access formats keep working through the buffered path.
-`jsonl_large.zip` (50,000 rows of NDJSON) makes the JSON reader go back to the
+`streaming/jsonl_large.zip` (50,000 rows of NDJSON) makes the JSON reader go back to the
 start of a streamed DEFLATE entry after sniffing it.
 They are generated with:
 

@@ -13,6 +13,8 @@ require zipfs
 
 require parquet
 
+require json
+
 require notwindows
 
 # ------------------------------------------------------------------------------
@@ -34,13 +36,13 @@ SELECT count(*), sum(id) FROM 'zip://examples/data.zip/numbers.parquet';
 
 query II
 SELECT count(*), sum(dbl)
-FROM read_json('zip://examples/jsonl_large.zip/numbers.jsonl', format = 'newline_delimited');
+FROM read_json('zip://examples/streaming/jsonl_large.zip/numbers.jsonl', format = 'newline_delimited');
 ----
 50000	2499950000
 
 query I
 SELECT name
-FROM read_json('zip://examples/jsonl_large.zip/numbers.jsonl', format = 'newline_delimited')
+FROM read_json('zip://examples/streaming/jsonl_large.zip/numbers.jsonl', format = 'newline_delimited')
 WHERE id = 49999;
 ----
 row_49999
