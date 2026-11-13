@@ -73,7 +73,7 @@ SELECT * FROM 'zip://examples/malformed_extra.zip/Fehlerü.csv';
 4
 
 # bad_crc.zip: bad_crc.csv's stored CRC-32 does not match its data, so reading
-# it fails instead of returning the data unchecked.
+# it (deflated) fails instead of returning the data unchecked.
 statement error
 SELECT * FROM 'zip://examples/bad_crc.zip/bad_crc.csv';
 ----
