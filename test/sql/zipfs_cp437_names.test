@@ -1,0 +1,85 @@
+# name: test/sql/zipfs_cp437_names.test
+# description: legacy (non-UTF-8) zip entry names are decoded to UTF-8
+# group: [sql]
+
+# Names without the UTF-8 flag are CP437 (APPNOTE 4.4.4); they come back as
+# UTF-8 instead of failing with "Invalid unicode".
+
+require zipfs
+
+# Hörschwag.csv (deflated) and Grüße.csv (stored) are stored as CP437 bytes
+# without bit 11; utf8_flagged_ü.csv sets bit 11.
+query IIII
+SELECT * FROM zip_contents('examples/cp437_names.zip');
+----
+Hörschwag.csv	20	false	false
+Grüße.csv	5	false	false
+utf8_flagged_ü.csv	5	false	false
+
+query I
+SELECT file FROM glob('zip://examples/cp437_names.zip/**') ORDER BY file;
+----
+zip://examples/cp437_names.zip/Grüße.csv
+zip://examples/cp437_names.zip/Hörschwag.csv
+zip://examples/cp437_names.zip/utf8_flagged_ü.csv
+
+# The UTF-8 names glob hands out open again, deflated and stored alike.
+query II
+SELECT * FROM 'zip://examples/cp437_names.zip/Hörschwag.csv';
+----
+1	Hörschwag
+
+query I
+SELECT * FROM 'zip://examples/cp437_names.zip/Grüße.csv';
+----
+2
+
+query I
+SELECT count(*) FROM read_csv('zip://examples/cp437_names.zip/*.csv', union_by_name = true);
+----
+3
+
+# unicode_path.zip: legacy names with an Info-ZIP Unicode Path extra field
+# (0x7075). "Łódź.csv" is stored in CP852 (CP437 would read "¥ód½.csv") with a
+# matching field; "Grüße.csv" is stored in CP437 with a stale field (its CRC is
+# for another name) that claims "WRONG.csv" and must be ignored.
+query I
+SELECT file_name FROM zip_contents('examples/unicode_path.zip');
+----
+Łódź.csv
+Grüße.csv
+
+query I
+SELECT * FROM 'zip://examples/unicode_path.zip/Łódź.csv';
+----
+1
+
+query I
+SELECT * FROM 'zip://examples/unicode_path.zip/Grüße.csv';
+----
+2
+
+# malformed_extra.zip: "Fehlerü.csv" is stored in CP437 with a Unicode Path
+# extra field whose length runs past the end of the extra data. The field is
+# ignored and the name decoded as CP437.
+query I
+SELECT file_name FROM zip_contents('examples/malformed_extra.zip');
+----
+Fehlerü.csv
+
+query I
+SELECT * FROM 'zip://examples/malformed_extra.zip/Fehlerü.csv';
+----
+4
+
+# bad_crc.zip: bad_crc.csv's stored CRC-32 does not match its data, so reading
+# it (deflated) fails instead of returning the data unchecked.
+statement error
+SELECT * FROM 'zip://examples/bad_crc.zip/bad_crc.csv';
+----
+Problem extracting file: CRC-32 check failed
+
+query I
+SELECT * FROM 'zip://examples/bad_crc.zip/good.csv';
+----
+6
