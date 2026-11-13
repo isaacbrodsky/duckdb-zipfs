@@ -58,3 +58,28 @@ query I
 SELECT * FROM 'zip://examples/unicode_path.zip/Grüße.csv';
 ----
 2
+
+# malformed_extra.zip: "Fehlerü.csv" is stored in CP437 with a Unicode Path
+# extra field whose length runs past the end of the extra data. The field is
+# ignored and the name decoded as CP437.
+query I
+SELECT file_name FROM zip_contents('examples/malformed_extra.zip');
+----
+Fehlerü.csv
+
+query I
+SELECT * FROM 'zip://examples/malformed_extra.zip/Fehlerü.csv';
+----
+4
+
+# bad_crc.zip: bad_crc.csv's stored CRC-32 does not match its data, so reading
+# it fails instead of returning the data unchecked.
+statement error
+SELECT * FROM 'zip://examples/bad_crc.zip/bad_crc.csv';
+----
+Problem extracting file: CRC-32 check failed
+
+query I
+SELECT * FROM 'zip://examples/bad_crc.zip/good.csv';
+----
+6
