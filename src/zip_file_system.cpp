@@ -144,7 +144,7 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   }
 
   // Get the path to the zip file
-  auto context = opener->TryGetClientContext();
+  auto context = opener->TryGetContext();
   const auto paths = SplitArchivePath(path.substr(6), *context);
   const auto &zip_path = paths.first;
   const auto &file_path = paths.second;
@@ -294,7 +294,7 @@ bool ZipFileSystem::OnDiskFile(FileHandle &handle) {
 vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
                                          FileOpener *opener) {
   // Remove the "zip://" prefix
-  auto context = opener->TryGetClientContext();
+  auto context = opener->TryGetContext();
   auto &fs = FileSystem::GetFileSystem(*context);
   const auto parts = SplitArchivePath(path.substr(6), *context);
   auto &zip_path = parts.first;
@@ -458,7 +458,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
 bool ZipFileSystem::FileExists(const string &filename,
                                optional_ptr<FileOpener> opener) {
   // Remove the "zip://" prefix
-  auto context = opener->TryGetClientContext();
+  auto context = opener->TryGetContext();
   const auto parts = SplitArchivePath(filename.substr(6), *context);
   auto &zip_path = parts.first;
   auto &file_path = parts.second;
