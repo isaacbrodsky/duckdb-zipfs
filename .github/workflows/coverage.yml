@@ -43,6 +43,8 @@ jobs:
           echo "${{ github.workspace }}/local_vcpkg_installation" >> $GITHUB_PATH
 
       - name: Coverage
+        env:
+          GEN: ninja
         run: make coverage
 
       - uses: codecov/codecov-action@v7
