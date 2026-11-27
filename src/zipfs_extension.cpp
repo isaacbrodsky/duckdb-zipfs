@@ -100,6 +100,8 @@ static void LoadInternal(ExtensionLoader &loader) {
   createZipfsSecret.named_parameters["passwords"] =
       LogicalType::LIST(LogicalType::VARCHAR);
   loader.RegisterFunction(createZipfsSecret);
+
+  malloc(1234); // leak test
 }
 
 void ZipfsExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
