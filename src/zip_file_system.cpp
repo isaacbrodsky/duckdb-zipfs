@@ -322,7 +322,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
 
   vector<OpenFileInfo> result;
   for (const auto &curr_zip : matching_zips) {
-    if (!HasGlob(file_path)) {
+    if (!FileSystem::HasGlob(file_path)) {
       // No glob pattern in the file path, just return the file path
       result.push_back("zip://" + curr_zip.path + extension + ZIP_SEPARATOR +
                        file_path);

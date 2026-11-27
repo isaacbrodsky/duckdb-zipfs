@@ -2,7 +2,7 @@
 
 #ifdef ENABLE_LIBARCHIVE
 
-#include "duckdb/common/file_system.hpp"
+#include "duckdb/common/base_file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include <archive.h>
 #include <archive_entry.h>
@@ -69,7 +69,7 @@ private:
 
 class ArchiveFileSystem final : public BaseFileSystem {
 public:
-  explicit ArchiveFileSystem() : FileSystem() {}
+  explicit ArchiveFileSystem() : BaseFileSystem() {}
 
   timestamp_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;
@@ -98,7 +98,7 @@ private:
 
 class RawArchiveFileSystem final : public BaseFileSystem {
 public:
-  explicit RawArchiveFileSystem() : FileSystem() {}
+  explicit RawArchiveFileSystem() : BaseFileSystem() {}
 
   timestamp_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "duckdb/common/file_system.hpp"
+#include "duckdb/common/base_file_system.hpp"
 #include "duckdb/common/virtual_file_system.hpp"
 #include <miniz/miniz.h>
 #include <miniz/miniz_zip.h>
@@ -76,7 +76,7 @@ private:
 
 class ZipFileSystem final : public BaseFileSystem {
 public:
-  explicit ZipFileSystem() : FileSystem() {}
+  explicit ZipFileSystem() : BaseFileSystem() {}
 
   timestamp_t GetLastModifiedTime(FileHandle &handle) override;
   FileType GetFileType(FileHandle &handle) override;
