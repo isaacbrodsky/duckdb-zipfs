@@ -12,3 +12,6 @@ coverage:
 	cmake --build build/debug --config Debug --target clean-coverage
 	make test_debug
 	cmake --build build/debug --config Debug --target coverage
+
+valgrind: debug
+	PYTHONMALLOC=malloc valgrind --track-origins=yes --leak-check=full --error-exitcode=99 $(TEST_RUNNER) ./build/debug/$(TEST_PATH) $(T)
