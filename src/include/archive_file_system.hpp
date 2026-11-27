@@ -44,7 +44,7 @@ class ArchiveFileHandle final : public FileHandle {
   friend class RawArchiveFileSystem;
 
 public:
-  ArchiveFileHandle(FileSystem &file_system, const string &path,
+  ArchiveFileHandle(BaseFileSystem &file_system, const string &path,
                     FileOpenFlags flags, timestamp_t &last_modified_time,
                     bool has_last_modified_time, FileType file_type,
                     bool on_disk_file, size_t sz, unique_ptr<data_t[]> data)
@@ -67,7 +67,7 @@ private:
   idx_t seek_offset;
 };
 
-class ArchiveFileSystem final : public FileSystem {
+class ArchiveFileSystem final : public BaseFileSystem {
 public:
   explicit ArchiveFileSystem() : FileSystem() {}
 
@@ -96,7 +96,7 @@ public:
 private:
 };
 
-class RawArchiveFileSystem final : public FileSystem {
+class RawArchiveFileSystem final : public BaseFileSystem {
 public:
   explicit RawArchiveFileSystem() : FileSystem() {}
 

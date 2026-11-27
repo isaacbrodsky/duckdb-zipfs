@@ -354,7 +354,7 @@ vector<OpenFileInfo> ArchiveFileSystem::Glob(const string &path,
   auto &fs = FileSystem::GetFileSystem(*context);
   const auto parts = SplitArchivePath(path.substr(10), *context);
   auto &zip_path = parts.first;
-  auto has_glob = HasGlob(zip_path);
+  auto has_glob = FileSystem::HasGlob(zip_path);
   auto &file_path = parts.second;
 
   // Get matching zip files

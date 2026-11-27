@@ -6,7 +6,7 @@
 
 namespace duckdb {
 
-class NoopArchiveFileSystem final : public FileSystem {
+class NoopArchiveFileSystem final : public BaseFileSystem {
 public:
   explicit NoopArchiveFileSystem() : FileSystem() {}
 
@@ -21,7 +21,7 @@ public:
 private:
 };
 
-class NoopRawArchiveFileSystem final : public FileSystem {
+class NoopRawArchiveFileSystem final : public BaseFileSystem {
 public:
   explicit NoopRawArchiveFileSystem() : FileSystem() {}
 

@@ -174,7 +174,7 @@ vector<OpenFileInfo> RawArchiveFileSystem::Glob(const string &path,
       Context::TryGetClientContext(FileOpener::TryGetContext(opener));
   auto &fs = FileSystem::GetFileSystem(*context);
   const auto file_path = path.substr(13);
-  auto has_glob = HasGlob(file_path);
+  auto has_glob = FileSystem::HasGlob(file_path);
 
   // Get matching zip files
   if (has_glob) {

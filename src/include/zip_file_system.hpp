@@ -16,7 +16,7 @@ class ZipFileHandle : public FileHandle {
   friend class ZipFileSystem;
 
 public:
-  ZipFileHandle(FileSystem &file_system, const string &path,
+  ZipFileHandle(BaseFileSystem &file_system, const string &path,
                 FileOpenFlags flags, unique_ptr<FileHandle> inner_handle_p,
                 const mz_zip_archive_file_stat &file_stat)
       : FileHandle(file_system, path, flags),
@@ -36,7 +36,7 @@ protected:
 // A compressed (DEFLATE) member decompressed up front into an owned buffer.
 class BufferedZipFileHandle final : public ZipFileHandle {
 public:
-  BufferedZipFileHandle(FileSystem &file_system, const string &path,
+  BufferedZipFileHandle(BaseFileSystem &file_system, const string &path,
                         FileOpenFlags flags,
                         unique_ptr<FileHandle> inner_handle_p,
                         const mz_zip_archive_file_stat &file_stat,
@@ -57,7 +57,7 @@ private:
 // data_offset.
 class WindowedZipFileHandle final : public ZipFileHandle {
 public:
-  WindowedZipFileHandle(FileSystem &file_system, const string &path,
+  WindowedZipFileHandle(BaseFileSystem &file_system, const string &path,
                         FileOpenFlags flags,
                         unique_ptr<FileHandle> inner_handle_p,
                         const mz_zip_archive_file_stat &file_stat,
@@ -74,7 +74,7 @@ private:
   idx_t data_offset;
 };
 
-class ZipFileSystem final : public FileSystem {
+class ZipFileSystem final : public BaseFileSystem {
 public:
   explicit ZipFileSystem() : FileSystem() {}
 
