@@ -1,4 +1,4 @@
-#include "archive_contents.hpp"
+#include "noop_archive_contents.hpp"
 #include "archive_file_system.hpp"
 
 #include "duckdb/common/exception.hpp"

@@ -23,7 +23,8 @@ RawArchiveFileSystem::OpenFile(const string &path, FileOpenFlags flags,
   }
 
   // Get the path to the zip file
-  auto context = opener->TryGetClientContext();
+  auto context =
+      Context::TryGetClientContext(FileOpener::TryGetContext(opener));
   const auto file_path = path.substr(13);
 
   // Now we need to find the file within the zip file and return out file handle
@@ -169,10 +170,11 @@ bool RawArchiveFileSystem::OnDiskFile(FileHandle &handle) {
 vector<OpenFileInfo> RawArchiveFileSystem::Glob(const string &path,
                                                 FileOpener *opener) {
   // Remove the "compressed://" prefix
-  auto context = opener->TryGetClientContext();
+  auto context =
+      Context::TryGetClientContext(FileOpener::TryGetContext(opener));
   auto &fs = FileSystem::GetFileSystem(*context);
   const auto file_path = path.substr(13);
-  auto has_glob = HasGlob(file_path);
+  auto has_glob = FileSystem::HasGlob(file_path);
 
   // Get matching zip files
   if (has_glob) {
@@ -196,7 +198,8 @@ vector<OpenFileInfo> RawArchiveFileSystem::Glob(const string &path,
 bool RawArchiveFileSystem::FileExists(const string &filename,
                                       optional_ptr<FileOpener> opener) {
   // Remove the "compressed://" prefix
-  auto context = opener->TryGetClientContext();
+  auto context =
+      Context::TryGetClientContext(FileOpener::TryGetContext(opener));
   const auto file_path = filename.substr(13);
 
   auto &fs = FileSystem::GetFileSystem(*context);
