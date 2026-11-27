@@ -1,5 +1,6 @@
 #include "zip_file_system.hpp"
 #include "utils.hpp"
+#include "zip_names.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/numeric_utils.hpp"
@@ -183,9 +184,7 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     }
 
     mz_uint file_index = 0;
-    auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
-                                     nullptr, 0, &file_index) == MZ_FALSE;
+    auto locate_failed = !ZipLocateEntry(zip, normalized_file_path, file_index);
     if (locate_failed) {
       throw IOException("Failed to find file: %s", normalized_file_path);
     }
@@ -218,8 +217,11 @@ ZipFileSystem::OpenFile(const string &path, FileOpenFlags flags,
     }
 
     auto read_buf = make_uniq_array2<data_t>(file_stat.m_uncomp_size);
-    mz_zip_reader_extract_file_to_mem(
-        &zip, file_stat.m_filename, read_buf.get(), file_stat.m_uncomp_size, 0);
+    if (!mz_zip_reader_extract_to_mem(&zip, file_index, read_buf.get(),
+                                      file_stat.m_uncomp_size, 0)) {
+      throw IOException("Problem extracting file: %s",
+                        mz_zip_get_error_string(mz_zip_get_last_error(&zip)));
+    }
 
     auto zip_file_handle = make_uniq<BufferedZipFileHandle>(
         *this, path, flags, std::move(handle), file_stat, std::move(read_buf));
@@ -346,9 +348,6 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
     zip.m_pRead = &FileSystemZipReadFunc;
     zip.m_pIO_opaque = archive_handle.get();
 
-    string zip_filename;
-    const size_t MAX_FILENAME_LEN = 65536; // = 2**16
-    zip_filename.reserve(1024);
     try {
       mz_uint flags = 0;
 
@@ -374,24 +373,7 @@ vector<OpenFileInfo> ZipFileSystem::Glob(const string &path,
 
         mz_zip_clear_last_error(&zip);
 
-        mz_uint filename_size = mz_zip_reader_get_filename(&zip, i, nullptr, 0);
-        // NOTE: filename_size already contains +1 for the leading \0
-        // Double filename capacity/length until it's enough or larger than
-        // 2**16, where 2**16 should be the max filename length in zip files.
-        if (filename_size > zip_filename.capacity()) {
-          size_t new_capacity =
-              zip_filename.capacity() > 0 ? zip_filename.capacity() : 1;
-          while (new_capacity < filename_size) {
-            new_capacity *= 2;
-            if (new_capacity > MAX_FILENAME_LEN) {
-              throw IOException("Filename too long");
-            }
-          }
-          zip_filename.reserve(new_capacity);
-        }
-        zip_filename.resize(filename_size - 1);
-        mz_zip_reader_get_filename(&zip, i, &zip_filename[0], filename_size);
-
+        auto zip_filename = ZipEntryName(zip, i);
         if (auto err = mz_zip_get_last_error(&zip)) {
           throw IOException("Problem getting filename: %s",
                             mz_zip_get_error_string(err));
@@ -496,9 +478,7 @@ bool ZipFileSystem::FileExists(const string &filename,
     }
 
     mz_uint file_index = 0;
-    auto locate_failed =
-        mz_zip_reader_locate_file_v2(&zip, normalized_file_path.c_str(),
-                                     nullptr, 0, &file_index) == MZ_FALSE;
+    auto locate_failed = !ZipLocateEntry(zip, normalized_file_path, file_index);
     if (locate_failed) {
       return false;
     }
