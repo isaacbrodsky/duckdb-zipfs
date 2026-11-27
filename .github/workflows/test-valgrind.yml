@@ -1,0 +1,46 @@
+name: test-valgrind
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  valgrind:
+    name: valgrind
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Install Valgrind
+        run: |
+          sudo apt update
+          sudo apt install valgrind
+
+      - name: Setup vcpkg
+        run: |
+          mkdir local_vcpkg_installation
+          cmake --version
+          cd local_vcpkg_installation
+          git init
+          git remote add origin "https://github.com/microsoft/vcpkg.git"
+          git fetch origin cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
+          git checkout cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
+          ./bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=${{ github.workspace }}/local_vcpkg_installation" >> $GITHUB_ENV
+          echo "VCPKG_TOOLCHAIN_PATH=${{ github.workspace }}/local_vcpkg_installation/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/local_vcpkg_installation" >> $GITHUB_PATH
+
+      - name: Valgrind
+        env:
+          GEN: ninja
+        run: make valgrind
